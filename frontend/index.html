@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EY Document Intelligence Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --page-bg: #ffffff;
+      --page-bg-alt: #f6f6f6;
+      --panel-ink: #111111;
+      --panel-ink-2: #1b1b1b;
+      --panel-soft: #ffffff;
+      --panel-muted: #f7f7f7;
+      --line: #d9d9d9;
+      --line-strong: #bfbfbf;
+      --text-primary: #201d18;
+      --text-secondary: #5f594f;
+      --text-muted: #7f776a;
+      --accent: #ffe600;
+      --accent-hover: #fff066;
+      --accent-deep: #c9b900;
+      --green: #3d6a4d;
+      --yellow: #9b7a2c;
+      --red: #9b5142;
+      --gold-soft: rgba(255, 230, 0, 0.14);
+      --radius: 14px;
+      --radius-lg: 20px;
+      --sidebar-w: 320px;
+      --shadow: 0 18px 45px rgba(17, 17, 17, 0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(255, 230, 0, 0.12), transparent 30%),
+        linear-gradient(180deg, #ffffff 0%, #f6f6f6 100%);
+      color: var(--text-primary);
+      font-family: 'Source Sans 3', 'Segoe UI', sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      display: flex;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(rgba(255,255,255,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.18) 1px, transparent 1px);
+      background-size: 24px 24px;
+      opacity: .12;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.55), transparent 70%);
+    }
+    a { color: var(--accent-deep); text-decoration: none; }
+    button { cursor: pointer; font-family: inherit; }
+    input, select, textarea { font-family: inherit; color: var(--text-primary); }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(43,35,24,.18); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: linear-gradient(180deg, #111111 0%, #1c1c1c 100%);
+      color: #ffffff;
+      border-right: 1px solid rgba(255,255,255,.08);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 24px 20px 30px;
+      gap: 22px;
+      box-shadow: inset -1px 0 0 rgba(255,255,255,.03);
+    }
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #ffffff 0%, #ffe600 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #111111;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      box-shadow: 0 10px 20px rgba(0,0,0,.18);
+    }
+    .logo-text { font-size: 16px; font-weight: 800; letter-spacing: 0.01em; color: #ffffff; }
+    .logo-sub { font-size: 12px; color: rgba(255,255,255,.72); margin-top: 2px; }
+
+    .config-section { display: flex; flex-direction: column; gap: 16px; }
+    .config-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: rgba(255,255,255,.66);
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .config-row { display: flex; flex-direction: column; gap: 7px; }
+    .config-label {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,.8);
+    }
+    .config-label span { color: #ffe600; font-weight: 700; font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,.16);
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffe600;
+      cursor: pointer;
+      border: 2px solid #111111;
+      box-shadow: 0 0 0 3px rgba(255,230,0,.18);
+    }
+    input[type=number], select, input[type=text] {
+      background: #fffdf8;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--text-primary);
+      width: 100%;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s, transform .15s;
+    }
+    input[type=number]:focus, select:focus, input[type=text]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255,230,0,.14);
+    }
+
+    #topbar {
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(17,17,17,.08);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      height: 58px;
+      gap: 6px;
+      flex-shrink: 0;
+      box-shadow: 0 8px 28px rgba(17,17,17,.04);
+    }
+    .tab-btn {
+      padding: 0 18px;
+      height: 58px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      transition: color .15s, border-color .15s, background .15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text-primary); background: rgba(255,230,0,.06); }
+    .tab-btn.active {
+      color: var(--accent-deep);
+      border-bottom-color: var(--accent);
+      background: rgba(255,230,0,.08);
+    }
+    .tab-icon { margin-right: 8px; opacity: .8; }
+
+    #content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .workspace-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+      padding: 20px 22px;
+      background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(246,246,246,.96));
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+    }
+    .workspace-kicker {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #111111;
+      margin-bottom: 6px;
+    }
+    .workspace-title {
+      font-size: 24px;
+      line-height: 1.15;
+      font-weight: 800;
+      color: #111111;
+      margin-bottom: 6px;
+    }
+    .workspace-copy {
+      max-width: 760px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    .workspace-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .workspace-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--panel-muted);
+      border: 1px solid rgba(17,17,17,.08);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .workspace-chip strong { color: #111111; font-weight: 800; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .card {
+      background: rgba(255,255,255,.88);
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #111111;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.01em;
+    }
+    .card-title .badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,230,0,.18);
+      color: #111111;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .section-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    #drop-zone {
+      border: 1.5px dashed rgba(17,17,17,.22);
+      border-radius: var(--radius-lg);
+      padding: 44px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s, transform .2s, box-shadow .2s;
+      margin-bottom: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,248,248,.96));
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: #111111;
+      background: linear-gradient(180deg, rgba(255,255,255,.99), rgba(255,230,0,.08));
+      box-shadow: 0 16px 34px rgba(17,17,17,.08);
+      transform: translateY(-1px);
+    }
+    #drop-zone .dz-icon { font-size: 34px; margin-bottom: 12px; opacity: .72; }
+    #drop-zone .dz-primary { font-size: 16px; font-weight: 800; color: #111111; }
+    #drop-zone .dz-secondary { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+    #drop-zone .dz-file { color: var(--accent-deep); font-weight: 800; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      transition: transform .15s, background .15s, border-color .15s, color .15s, box-shadow .15s;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary {
+      background: linear-gradient(180deg, #ffe600, #d6c200);
+      color: #111111;
+      border-color: rgba(17,17,17,.14);
+      box-shadow: 0 10px 24px rgba(17,17,17,.12);
+    }
+    .btn-primary:hover { background: linear-gradient(180deg, #fff066, #ffe600); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-secondary {
+      background: rgba(255,255,255,.9);
+      color: var(--text-primary);
+      border-color: rgba(17,17,17,.12);
+    }
+    .btn-secondary:hover { border-color: var(--accent); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      padding: 6px 10px;
+    }
+    .btn-ghost:hover { color: var(--text-primary); }
+
+    #progress-section { margin-top: 20px; }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .progress-label { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+    .progress-pct { font-size: 13px; font-weight: 800; color: var(--accent-deep); }
+    .progress-track {
+      height: 9px;
+      background: #ececec;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #111111, #ffe600);
+      border-radius: 999px;
+      transition: width .4s ease;
+      width: 0%;
+    }
+    .progress-msg { font-size: 12px; color: var(--text-muted); }
+
+    .stage-list {
+      display: flex;
+      gap: 6px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .stage-pill {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid rgba(17,17,17,.12);
+      color: var(--text-muted);
+      background: rgba(255,255,255,.9);
+      transition: all .2s;
+    }
+    .stage-pill.active {
+      background: rgba(255,230,0,.18);
+      border-color: var(--accent);
+      color: #111111;
+    }
+    .stage-pill.done {
+      background: rgba(17,17,17,.06);
+      border-color: rgba(61,106,77,.28);
+      color: var(--green);
+    }
+
+    #summary-section { display: none; margin-top: 20px; }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+    }
+    .stat-card {
+      background: linear-gradient(180deg, rgba(255,255,255,.98), rgba(246,246,246,.96));
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: 14px;
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-value { font-size: 24px; font-weight: 800; color: #111111; }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+    #chunk-list { display: flex; flex-direction: column; gap: 12px; }
+    .chunk-card {
+      background: rgba(255,255,255,.88);
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: var(--radius-lg);
+      border-left: 5px solid var(--line-strong);
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s, transform .15s, box-shadow .15s;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(39,31,20,.05);
+    }
+    .chunk-card:hover {
+      background: rgba(255,255,255,.98);
+      transform: translateY(-1px);
+      box-shadow: 0 16px 32px rgba(39,31,20,.08);
+    }
+    .chunk-card.quality-high { border-left-color: var(--green); }
+    .chunk-card.quality-med  { border-left-color: var(--yellow); }
+    .chunk-card.quality-low  { border-left-color: var(--red); }
+    .chunk-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 12px;
+    }
+    .chunk-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .chunk-idx { font-weight: 800; color: var(--text-primary); font-size: 13px; }
+    .metric-pill {
+      font-size: 10px; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px;
+      background: rgba(255,230,0,.12);
+      border: 1px solid rgba(17,17,17,.08);
+      color: var(--text-secondary);
+    }
+    .chunk-score-badge {
+      font-size: 12px; font-weight: 800;
+      padding: 4px 10px; border-radius: 999px;
+      white-space: nowrap;
+    }
+    .score-high { background: rgba(61,106,77,.12); color: var(--green); }
+    .score-med  { background: rgba(155,122,44,.12); color: var(--yellow); }
+    .score-low  { background: rgba(155,81,66,.12); color: var(--red); }
+    .chunk-text {
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .chunk-expand { color: var(--accent-deep); cursor: pointer; font-size: 12px; font-weight: 700; }
+    .chunk-entities { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .entity-tag {
+      font-size: 10px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(255,230,0,.18);
+      border: 1px solid rgba(17,17,17,.12);
+      color: #111111;
+    }
+    .chunk-detail {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(17,17,17,.08);
+      font-size: 12px;
+    }
+    .chunk-detail.open { display: block; }
+    .detail-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .detail-item { display: flex; flex-direction: column; gap: 2px; }
+    .detail-key { font-size: 10px; text-transform: uppercase; color: var(--text-muted); letter-spacing: .08em; }
+    .detail-val { font-size: 12px; color: var(--text-primary); font-weight: 700; }
+
+    .explorer-controls {
+      display: flex; gap: 10px; align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1; min-width: 220px;
+      background: rgba(255,255,255,.9);
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: 12px;
+      padding: 9px 14px;
+      font-size: 13px;
+      color: var(--text-primary);
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .filter-select {
+      background: rgba(255,255,255,.9);
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: 12px;
+      padding: 9px 12px;
+      font-size: 12px;
+    }
+
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .chart-container { position: relative; height: 220px; }
+    .stage-info-list { display: flex; flex-direction: column; gap: 10px; }
+    .stage-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 12px;
+      background: var(--panel-muted);
+      border-radius: 14px;
+      border: 1px solid rgba(17,17,17,.08);
+    }
+    .stage-num {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: rgba(255,230,0,.18);
+      border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px; color: var(--accent-deep);
+      flex-shrink: 0;
+    }
+    .stage-desc { flex: 1; }
+    .stage-name { font-weight: 800; font-size: 13px; color: var(--text-primary); }
+    .stage-detail-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    #entity-graph-svg {
+      width: 100%; height: 300px;
+      background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(250,247,240,.94));
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(17,17,17,.08);
+    }
+
+    .export-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .export-card {
+      background: rgba(255,255,255,.9);
+      border: 1px solid rgba(17,17,17,.08);
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      text-align: center;
+      transition: border-color .15s, transform .15s, box-shadow .15s;
+      box-shadow: 0 10px 26px rgba(17,17,17,.05);
+    }
+    .export-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 16px 30px rgba(17,17,17,.08); }
+    .export-icon { font-size: 32px; margin-bottom: 12px; opacity: .88; }
+    .export-title { font-weight: 800; font-size: 14px; margin-bottom: 6px; }
+    .export-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 999;
+      background: rgba(29,26,22,.96);
+      color: #f7f0e7;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 13px;
+      display: none;
+      max-width: 320px;
+      box-shadow: 0 16px 32px rgba(0,0,0,.18);
+    }
+    #toast.show { display: block; }
+    #toast.success { border-left: 3px solid var(--green); }
+    #toast.error   { border-left: 3px solid var(--red); }
+    #toast.info    { border-left: 3px solid var(--accent); }
+
+    .hidden { display: none !important; }
+    .text-muted { color: var(--text-muted); font-size: 12px; }
+    .mt-4 { margin-top: 16px; }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon { font-size: 42px; opacity: .45; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+    hr.divider { border: none; border-top: 1px solid rgba(17,17,17,.08); margin: 20px 0; }
+
+    .metrics-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .metrics-bar-label { font-size: 11px; color: var(--text-muted); width: 28px; text-align: right; font-weight: 700; }
+    .metrics-bar-track { flex: 1; height: 6px; background: #ebe3d5; border-radius: 999px; overflow: hidden; }
+    .metrics-bar-fill { height: 100%; border-radius: 999px; transition: width .4s; }
+    .metrics-bar-val { font-size: 11px; color: var(--text-secondary); width: 34px; text-align: right; }
+
+    @media (max-width: 1180px) {
+      body { flex-direction: column; overflow: auto; }
+      #sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid rgba(255,255,255,.08); }
+      #main { min-height: 0; }
+      .workspace-header { flex-direction: column; }
+      .workspace-metrics { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
+<aside id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">EY</div>
+    <div>
+      <div class="logo-text">EY Advisory Workspace</div>
+      <div class="logo-sub">Document intelligence review environment</div>
+    </div>
+  </div>
+
+  <div class="config-section">
+    <div class="config-title">Chunking Controls</div>
+
+    <div class="config-row">
+      <div class="config-label">Strategy</div>
+      <select id="cfg-strategy">
+        <option value="auto" selected>Auto (best quality)</option>
+        <option value="structure">Structure-based</option>
+        <option value="semantic_boundaries">Semantic boundaries</option>
+        <option value="sentence_clustering">Sentence clustering</option>
+        <option value="recursive">Recursive character</option>
+        <option value="sliding_window">Sliding window</option>
+      </select>
+    </div>
+
+    <div class="config-row">
+      <div class="config-label">N_min (tokens) <span id="val-nmin">100</span></div>
+      <input type="range" id="cfg-nmin" min="20" max="300" value="100"
+             oninput="document.getElementById('val-nmin').textContent=this.value" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">N_max (tokens) <span id="val-nmax">500</span></div>
+      <input type="range" id="cfg-nmax" min="100" max="1000" value="500"
+             oninput="document.getElementById('val-nmax').textContent=this.value" />
+    </div>
+
+    <div class="config-title" style="margin-top:4px">Boundary Controls</div>
+
+    <div class="config-row">
+      <div class="config-label">τ_JSD low <span id="val-jsd-low">0.15</span></div>
+      <input type="range" id="cfg-jsd-low" min="0.05" max="0.40" step="0.01" value="0.15"
+             oninput="document.getElementById('val-jsd-low').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">τ_JSD high <span id="val-jsd-high">0.45</span></div>
+      <input type="range" id="cfg-jsd-high" min="0.20" max="0.80" step="0.01" value="0.45"
+              oninput="document.getElementById('val-jsd-high').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">Entropy metric</div>
+      <select id="cfg-entropy-metric" data-reactive="1">
+        <option value="jsd">JSD</option>
+        <option value="hellinger">Hellinger</option>
+        <option value="hybrid" selected>Hybrid</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <div class="config-label">Hybrid λ <span id="val-hybrid-lambda">0.60</span></div>
+      <input type="range" id="cfg-hybrid-lambda" min="0.10" max="0.90" step="0.01" value="0.60"
+             oninput="document.getElementById('val-hybrid-lambda').textContent=parseFloat(this.value).toFixed(2)" data-reactive="1" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">Thresholding mode</div>
+      <select id="cfg-threshold-mode" data-reactive="1">
+        <option value="fixed">Fixed</option>
+        <option value="percentile" selected>Percentile</option>
+      </select>
+    </div>
+    <div class="config-row">
+      <div class="config-label">Low percentile <span id="val-pctl-low">25</span></div>
+      <input type="range" id="cfg-pctl-low" min="5" max="45" step="1" value="25"
+             oninput="document.getElementById('val-pctl-low').textContent=this.value" data-reactive="1" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">High percentile <span id="val-pctl-high">75</span></div>
+      <input type="range" id="cfg-pctl-high" min="55" max="95" step="1" value="75"
+             oninput="document.getElementById('val-pctl-high').textContent=this.value" data-reactive="1" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">τ_sem similarity <span id="val-sem">0.75</span></div>
+      <input type="range" id="cfg-sem" min="0.40" max="0.95" step="0.01" value="0.75"
+              oninput="document.getElementById('val-sem').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+
+    <div class="config-title" style="margin-top:4px">Optimization</div>
+
+    <div class="config-row">
+      <div class="config-label">Max iterations <span id="val-maxiter">10</span></div>
+      <input type="range" id="cfg-maxiter" min="1" max="20" value="10"
+             oninput="document.getElementById('val-maxiter').textContent=this.value" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">α (CodeBLEU weight) <span id="val-alpha">0.40</span></div>
+      <input type="range" id="cfg-alpha" min="0.1" max="0.8" step="0.05" value="0.4"
+             oninput="document.getElementById('val-alpha').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">β (recall weight) <span id="val-beta">0.40</span></div>
+      <input type="range" id="cfg-beta" min="0.1" max="0.8" step="0.05" value="0.4"
+             oninput="document.getElementById('val-beta').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+    <div class="config-row">
+      <div class="config-label">λ (count penalty) <span id="val-lambda">0.20</span></div>
+      <input type="range" id="cfg-lambda" min="0.05" max="0.50" step="0.05" value="0.2"
+             oninput="document.getElementById('val-lambda').textContent=parseFloat(this.value).toFixed(2)" />
+    </div>
+
+    <div class="config-title" style="margin-top:4px">Embedding Model</div>
+    <div class="config-row">
+      <div class="config-label">Model</div>
+      <select id="cfg-model">
+        <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
+        <option value="all-mpnet-base-v2">all-mpnet-base-v2</option>
+      </select>
+    </div>
+
+    <div class="config-title" style="margin-top:4px">Service Endpoint</div>
+    <div class="config-row">
+      <div class="config-label">Backend URL</div>
+      <input type="text" id="cfg-api" value="http://localhost:8000"
+             style="background:rgba(255,255,255,.95);border:1px solid var(--line);
+                    border-radius:12px;padding:8px 12px;
+                    font-size:13px;color:var(--text-primary);width:100%;outline:none;" />
+    </div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════ MAIN AREA ═══════════════════════════════ -->
+<div id="main">
+  <div class="workspace-header">
+    <div>
+      <div class="workspace-kicker">EY advisory review</div>
+      <div class="workspace-title">Executive review of document structure, chunk quality, and boundary control</div>
+      <div class="workspace-copy">Upload a document, assess the pipeline output, and export a concise deliverable suitable for stakeholder review.</div>
+    </div>
+    <div class="workspace-metrics">
+      <div class="workspace-chip"><strong>7</strong> stages</div>
+      <div class="workspace-chip"><strong>Live</strong> status polling</div>
+      <div class="workspace-chip"><strong>Export</strong> ready</div>
+    </div>
+  </div>
+
+  <div style="margin: 0 0 14px; padding: 10px 14px; border: 1px solid rgba(17,17,17,.08); border-radius: 14px; background: rgba(255,255,255,.9); color: #111111; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+  </div>
+
+  <!-- Topbar / Tab bar -->
+  <nav id="topbar">
+    <button class="tab-btn active" data-tab="upload">
+      <span class="tab-icon">▣</span> Submit &amp; Analyze
+    </button>
+    <button class="tab-btn" data-tab="explorer">
+      <span class="tab-icon">▤</span> Review Findings
+    </button>
+    <button class="tab-btn" data-tab="inspector">
+      <span class="tab-icon">▥</span> Process Controls
+    </button>
+    <button class="tab-btn" data-tab="export">
+      <span class="tab-icon">▦</span> Deliverables
+    </button>
+  </nav>
+
+  <!-- Content -->
+  <div id="content">
+
+    <!-- ════════════════════ TAB 1: Upload & Run ════════════════════════ -->
+    <div class="tab-pane active" id="tab-upload">
+      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" accept=".pdf,.txt,.md,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.html,.css" hidden />
+        <div class="dz-icon">◫</div>
+        <div class="dz-primary" id="dz-text">Drop a file to begin the review</div>
+        <div class="dz-secondary">PDF, TXT, Markdown, Python, JavaScript, Java, C/C++ and other supported formats</div>
+      </div>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;">
+        <button class="btn btn-primary" id="run-btn" disabled onclick="runPipeline()">
+          Start Analysis
+        </button>
+        <button class="btn btn-secondary" onclick="resetAll()" id="reset-btn">
+          Clear Workspace
+        </button>
+        <span class="text-muted" id="file-info"></span>
+      </div>
+
+      <!-- Progress -->
+      <div id="progress-section" class="card hidden">
+        <div class="card-title">Processing Status</div>
+        <div class="progress-header">
+          <span class="progress-label" id="progress-stage">Waiting…</span>
+          <span class="progress-pct" id="progress-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-msg" id="progress-msg"></div>
+        <div class="stage-list">
+          <span class="stage-pill" data-stage="S1">S1 Profile</span>
+          <span class="stage-pill" data-stage="S2">S2 Chunk</span>
+          <span class="stage-pill" data-stage="S3">S3 Entropy</span>
+          <span class="stage-pill" data-stage="S4">S4 Filter</span>
+          <span class="stage-pill" data-stage="S5">S5 Graph</span>
+          <span class="stage-pill" data-stage="S6">S6 Embed</span>
+          <span class="stage-pill" data-stage="S7">S7 RL</span>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div id="summary-section" class="card">
+        <div class="card-title">Executive Summary <span class="badge" id="summary-badge">complete</span></div>
+        <div class="summary-grid" id="summary-grid"></div>
+
+        <hr class="divider" />
+
+        <!-- S1 Metrics -->
+        <div style="margin-bottom:10px;font-size:12px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em">
+          Document Quality Metrics
+        </div>
+        <div id="metrics-bars"></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════ TAB 2: Chunk Explorer ══════════════════════ -->
+    <div class="tab-pane" id="tab-explorer">
+      <div class="explorer-controls">
+        <input class="search-input" type="text" placeholder="Search chunks…"
+               id="chunk-search" oninput="filterChunks()" />
+        <select class="filter-select" id="quality-filter" onchange="filterChunks()">
+          <option value="">All quality</option>
+          <option value="high">High (≥ 0.75)</option>
+          <option value="med">Medium (0.50–0.74)</option>
+          <option value="low">Low (&lt; 0.50)</option>
+        </select>
+        <select class="filter-select" id="boundary-filter" onchange="filterChunks()">
+          <option value="">All boundaries</option>
+          <option value="hard">Hard</option>
+          <option value="soft">Soft</option>
+          <option value="merged">Merged</option>
+        </select>
+        <span class="text-muted" id="chunk-count-label"></span>
+      </div>
+      <div id="chunk-list">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <p>Run the pipeline to explore chunks.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════ TAB 3: Pipeline Inspector ══════════════════ -->
+    <div class="tab-pane" id="tab-inspector">
+      <div class="empty-state" id="inspector-empty">
+        <div class="empty-icon">▥</div>
+        <p>Run the pipeline to inspect each stage.</p>
+      </div>
+      <div id="inspector-content" class="hidden">
+
+        <!-- Stage summary -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-title">Stage Overview</div>
+          <div class="stage-info-list" id="stage-info-list"></div>
+        </div>
+
+        <div class="inspector-grid">
+          <!-- S3: JSD chart -->
+          <div class="card">
+            <div class="card-title">Boundary Stability</div>
+            <div class="chart-container">
+              <canvas id="jsd-chart"></canvas>
+            </div>
+          </div>
+
+          <!-- S7: RL reward curve -->
+          <div class="card">
+            <div class="card-title">Optimization Trend</div>
+            <div class="chart-container">
+              <canvas id="rl-chart"></canvas>
+            </div>
+            <div id="reward-breakdown" class="text-muted mt-4" style="font-size:12px;"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="card-title">Embedding Ensemble Composition</div>
+          <div id="ensemble-composition" class="text-muted" style="font-size:12px;"></div>
+        </div>
+
+        <!-- S5: Entity graph -->
+        <div class="card">
+          <div class="card-title">Entity Network</div>
+          <svg id="entity-graph-svg" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="text-muted mt-4" style="text-align:center">
+            Nodes = chunks · Edges = shared named entities · Node size ∝ entity count
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════ TAB 4: Export ══════════════════════════════ -->
+    <div class="tab-pane" id="tab-export">
+      <div class="empty-state" id="export-empty">
+        <div class="empty-icon">▦</div>
+        <p>Run the pipeline first to enable export.</p>
+      </div>
+      <div id="export-content" class="hidden">
+        <div class="export-grid">
+          <div class="export-card">
+            <div class="export-icon">JSON</div>
+            <div class="export-title">JSON</div>
+            <div class="export-desc">Complete results package with metadata, scores, and entity data.</div>
+            <button class="btn btn-primary" onclick="doExport('json')">Download JSON</button>
+          </div>
+          <div class="export-card">
+            <div class="export-icon">CSV</div>
+            <div class="export-title">CSV Scorecard</div>
+            <div class="export-desc">Tabular summary for score review, boundary types, and entities.</div>
+            <button class="btn btn-primary" onclick="doExport('csv')">Download CSV</button>
+          </div>
+          <div class="export-card">
+            <div class="export-icon">MD</div>
+            <div class="export-title">Markdown</div>
+            <div class="export-desc">Formatted chunk output with metadata comments for downstream review.</div>
+            <button class="btn btn-primary" onclick="doExport('markdown')">Download Markdown</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #content -->
+</div><!-- #main -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════ JS APP ════════════════════════════════ -->
+<script>
+/* ── App State ─────────────────────────────────────────────────────────── */
+const state = {
+  documentId: null,
+  jobId: null,
+  results: null,
+  pollTimer: null,
+};
+
+let jsdChart  = null;
+let rlChart   = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindReactiveControls();
+});
+
+/* ── Tab switching ─────────────────────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── File drag-and-drop ─────────────────────────────────────────────────── */
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+['dragover', 'dragenter'].forEach(e =>
+  dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); })
+);
+['dragleave', 'drop'].forEach(e =>
+  dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); })
+);
+dropZone.addEventListener('drop', ev => {
+  const f = ev.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+async function handleFile(file) {
+  document.getElementById('dz-text').innerHTML =
+    `✅ <span class="dz-file">${file.name}</span> (${formatBytes(file.size)})`;
+  document.getElementById('file-info').textContent = '';
+  document.getElementById('run-btn').disabled = true;
+
+  const apiBase = document.getElementById('cfg-api').value.replace(/\/$/, '');
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const res = await fetch(`${apiBase}/upload`, { method: 'POST', body: fd });
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    const data = await res.json();
+    state.documentId = data.document_id;
+    document.getElementById('file-info').textContent =
+      `${data.token_count.toLocaleString()} tokens`;
+    document.getElementById('run-btn').disabled = false;
+    showToast(`Uploaded: ${file.name}`, 'success');
+  } catch (err) {
+    showToast(`Upload failed: ${err.message}`, 'error');
+    document.getElementById('dz-text').textContent = 'Drop a file to begin the review';
+  }
+}
+
+/* ── Run pipeline ──────────────────────────────────────────────────────── */
+async function runPipeline() {
+  if (!state.documentId) return;
+
+  const config = getConfig();
+  const apiBase = document.getElementById('cfg-api').value.replace(/\/$/, '');
+
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('progress-section').classList.remove('hidden');
+  document.getElementById('summary-section').style.display = 'none';
+
+  // Reset stage pills
+  document.querySelectorAll('.stage-pill').forEach(p => {
+    p.classList.remove('active', 'done');
+  });
+
+  const fd = new FormData();
+  fd.append('config', JSON.stringify(config));
+
+  try {
+    const res = await fetch(`${apiBase}/run/${state.documentId}`, { method: 'POST', body: fd });
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    const data = await res.json();
+    state.jobId = data.job_id;
+    pollStatus(apiBase);
+  } catch (err) {
+    showToast(`Failed to start pipeline: ${err.message}`, 'error');
+    document.getElementById('run-btn').disabled = false;
+  }
+}
+
+/* ── Status polling ────────────────────────────────────────────────────── */
+function pollStatus(apiBase) {
+  if (state.pollTimer) clearInterval(state.pollTimer);
+  state.pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${apiBase}/status/${state.jobId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      updateProgress(data);
+
+      if (data.status === 'complete') {
+        clearInterval(state.pollTimer);
+        fetchResults(apiBase);
+      } else if (data.status === 'error') {
+        clearInterval(state.pollTimer);
+        showToast(`Pipeline error: ${data.message}`, 'error');
+        document.getElementById('run-btn').disabled = false;
+      }
+    } catch (_) {}
+  }, 1000);
+}
+
+function updateProgress(data) {
+  const pct = data.progress || 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-stage').textContent = data.stage || '';
+  document.getElementById('progress-msg').textContent = data.message || '';
+
+  const stageOrder = ['S1','S2','S3','S4','S5','S6','S7'];
+  const currentIdx = stageOrder.indexOf(data.stage);
+  document.querySelectorAll('.stage-pill').forEach((pill, i) => {
+    pill.classList.remove('active', 'done');
+    if (i < currentIdx) pill.classList.add('done');
+    else if (i === currentIdx) pill.classList.add('active');
+  });
+}
+
+/* ── Fetch & render results ────────────────────────────────────────────── */
+async function fetchResults(apiBase) {
+  try {
+    const res = await fetch(`${apiBase}/results/${state.jobId}`);
+    if (!res.ok) { const t = await res.text(); throw new Error(t); }
+    state.results = await res.json();
+
+    renderSummary(state.results);
+    renderChunkExplorer(state.results.chunks);
+    renderInspector(state.results);
+    enableExport();
+
+    document.querySelectorAll('.stage-pill').forEach(p => {
+      p.classList.remove('active');
+      p.classList.add('done');
+    });
+    document.getElementById('progress-fill').style.width = '100%';
+    document.getElementById('progress-pct').textContent = '100%';
+    document.getElementById('progress-stage').textContent = 'Complete';
+    document.getElementById('progress-msg').textContent = 'All stages finished.';
+    document.getElementById('run-btn').disabled = false;
+    showToast('Pipeline complete!', 'success');
+  } catch (err) {
+    showToast(`Failed to fetch results: ${err.message}`, 'error');
+    document.getElementById('run-btn').disabled = false;
+  }
+}
+
+/* ── Summary ───────────────────────────────────────────────────────────── */
+function renderSummary(results) {
+  const s = results.summary;
+  const prof = results.doc_profile;
+  document.getElementById('summary-section').style.display = 'block';
+
+  const grid = document.getElementById('summary-grid');
+  grid.innerHTML = [
+    { label: 'Doc Type',       value: s.doc_type || '-' },
+    { label: 'Domain',         value: s.domain || '-' },
+    { label: 'Chunks',         value: s.chunk_count },
+    { label: 'Mean Score',     value: (s.mean_chunk_score * 100).toFixed(1) + '%' },
+    { label: 'RL Iterations',  value: s.rl_iterations },
+    { label: 'Tokens',         value: (s.token_count || 0).toLocaleString() },
+  ].map(({ label, value }) => `
+    <div class="stat-card">
+      <div class="stat-value">${value}</div>
+      <div class="stat-label">${label}</div>
+    </div>
+  `).join('');
+
+  // S1 Metrics
+  const metrics = (prof && prof.metrics) ? prof.metrics : {};
+  const barsEl = document.getElementById('metrics-bars');
+  barsEl.innerHTML = ['RC','ICC','DCC','BI','SC'].map(k => {
+    const v = metrics[k] || 0;
+    const pct = Math.round(v * 100);
+    const color = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--yellow)' : 'var(--red)';
+    return `
+      <div class="metrics-bar-row">
+        <div class="metrics-bar-label">${k}</div>
+        <div class="metrics-bar-track">
+          <div class="metrics-bar-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+        <div class="metrics-bar-val">${pct}%</div>
+      </div>`;
+  }).join('');
+}
+
+/* ── Chunk Explorer ────────────────────────────────────────────────────── */
+let allChunks = [];
+
+function renderChunkExplorer(chunks) {
+  allChunks = chunks || [];
+  document.getElementById('chunk-count-label').textContent =
+    `${allChunks.length} chunk${allChunks.length !== 1 ? 's' : ''}`;
+  filterChunks();
+}
+
+function filterChunks() {
+  const q = (document.getElementById('chunk-search').value || '').toLowerCase();
+  const qualF = document.getElementById('quality-filter').value;
+  const boundF = document.getElementById('boundary-filter').value;
+
+  const filtered = allChunks.filter(c => {
+    const score = c.chunk_score || 0;
+    const qual = score >= 0.75 ? 'high' : score >= 0.5 ? 'med' : 'low';
+    const text = (c.text || '').toLowerCase();
+    return (!q || text.includes(q)) &&
+           (!qualF || qual === qualF) &&
+           (!boundF || (c.boundary_type || '') === boundF);
+  });
+
+  const list = document.getElementById('chunk-list');
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>No chunks match the filter.</p></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map((c, idx) => renderChunkCard(c, idx)).join('');
+}
+
+function renderChunkCard(c, displayIdx) {
+  const score = c.chunk_score || 0;
+  const qualClass = score >= 0.75 ? 'quality-high' : score >= 0.5 ? 'quality-med' : 'quality-low';
+  const scoreBadgeClass = score >= 0.75 ? 'score-high' : score >= 0.5 ? 'score-med' : 'score-low';
+  const scoreLabel = (score * 100).toFixed(1) + '%';
+
+  const text = c.text || '';
+  const maxLen = 300;
+  const isTruncated = text.length > maxLen;
+  const preview = isTruncated ? text.slice(0, maxLen) : text;
+
+  const entities = (c.entities || []).slice(0, 8).map(e =>
+    `<span class="entity-tag">${escHtml(e.text)} <small style="opacity:.6">${e.label}</small></span>`
+  ).join('');
+
+  const neighbors = (c.graph_neighbors || []).join(', ') || '—';
+
+  return `
+    <div class="chunk-card ${qualClass}" onclick="toggleChunkDetail(this)" data-idx="${c.chunk_index}">
+      <div class="chunk-header">
+        <div class="chunk-meta">
+          <span class="chunk-idx">#${c.chunk_index}</span>
+          <span class="metric-pill">🔤 ${c.token_count || 0} tokens</span>
+          <span class="metric-pill">JSD ${(c.jsd_score || 0).toFixed(3)}</span>
+          <span class="metric-pill">BLEU ${(c.boundary_score || 0).toFixed(3)}</span>
+          ${c.boundary_type ? `<span class="metric-pill">${c.boundary_type}</span>` : ''}
+        </div>
+        <span class="chunk-score-badge ${scoreBadgeClass}">${scoreLabel}</span>
+      </div>
+      <div class="chunk-text" id="ctext-${c.chunk_index}">${escHtml(preview)}${isTruncated ? '…' : ''}</div>
+      ${isTruncated ? `<span class="chunk-expand" data-expand-idx="${c.chunk_index}">▼ show full</span>` : ''}
+      ${entities ? `<div class="chunk-entities">${entities}</div>` : ''}
+      <div class="chunk-detail" id="cdetail-${c.chunk_index}">
+        <div class="detail-row">
+          <div class="detail-item"><div class="detail-key">Chunk Score</div><div class="detail-val">${scoreLabel}</div></div>
+          <div class="detail-item"><div class="detail-key">JSD Score</div><div class="detail-val">${(c.jsd_score || 0).toFixed(4)}</div></div>
+          <div class="detail-item"><div class="detail-key">Boundary Score</div><div class="detail-val">${(c.boundary_score || 0).toFixed(4)}</div></div>
+          <div class="detail-item"><div class="detail-key">Boundary Type</div><div class="detail-val">${c.boundary_type || '-'}</div></div>
+          <div class="detail-item"><div class="detail-key">Graph Neighbors</div><div class="detail-val">${neighbors}</div></div>
+          <div class="detail-item"><div class="detail-key">Entities</div><div class="detail-val">${(c.entities || []).length}</div></div>
+        </div>
+        ${c.context_header ? `<div style="margin-top:10px;font-size:11px;color:var(--text-muted);padding:8px;background:var(--panel-muted);border-radius:10px;border:1px solid var(--line)">${escHtml(c.context_header)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function toggleChunkDetail(el) {
+  const idx = el.dataset.idx;
+  const detail = document.getElementById('cdetail-' + idx);
+  if (detail) detail.classList.toggle('open');
+}
+
+// Event-delegation handler for expand buttons (avoids inline onclick with interpolated data)
+document.addEventListener('click', function(ev) {
+  const btn = ev.target.closest('[data-expand-idx]');
+  if (!btn) return;
+  ev.stopPropagation();
+  const idx = btn.dataset.expandIdx;
+  const el = document.getElementById('ctext-' + idx);
+  const chunk = allChunks.find(c => String(c.chunk_index) === String(idx));
+  if (el && chunk) {
+    el.textContent = chunk.text;
+    btn.remove();
+  }
+});
+
+/* ── Pipeline Inspector ────────────────────────────────────────────────── */
+function renderInspector(results) {
+  document.getElementById('inspector-empty').classList.add('hidden');
+  document.getElementById('inspector-content').classList.remove('hidden');
+
+  const details = results.stage_details || {};
+
+  // Stage info rows
+  const stages = [
+    { num:'S1', name:'Document Profiler',
+      detail: details.s1 ? `Type: ${details.s1.type} · Domain: ${details.s1.domain} · ${details.s1.token_count} tokens` : '' },
+    { num:'S2', name:'Parallel Chunkers',
+      detail: details.s2 ? `Recursive: ${details.s2.strategies?.recursive||0} · Sliding: ${details.s2.strategies?.sliding_window||0} · Structure: ${details.s2.strategies?.structure||0} · Semantic: ${details.s2.strategies?.semantic_boundaries||0} · Cluster: ${details.s2.strategies?.sentence_clustering||0} → used: <strong>${details.s2.selected_strategy||'?'}</strong>${details.s2.forced_strategy && details.s2.forced_strategy !== 'auto' ? ' (forced)' : ' (auto)'}` : '' },
+    { num:'S3', name:'Entropy Boundary Refinement',
+      detail: details.s3 ? `${details.s3.chunk_count} chunks · Metric: ${(details.s3.metric||'jsd').toUpperCase()} · Mode: ${details.s3.thresholds?.mode||'fixed'}` : '' },
+    { num:'S4', name:'Boundary Quality Filter',
+      detail: details.s4 ? `${details.s4.chunk_count} chunks after BLEU filter` : '' },
+    { num:'S5', name:'Graph Enrichment',
+      detail: details.s5 ? `${details.s5.entity_graph?.nodes?.length||0} nodes · ${details.s5.entity_graph?.edges?.length||0} edges` : '' },
+    { num:'S6', name:'Contextual Embedding',
+      detail: details.s6 ? `Model: ${details.s6.model} · Dim: ${details.s6.embedding_dim}` : '' },
+    { num:'S7', name:'RL Reward Calibration',
+      detail: details.s7 ? `${details.s7.iterations} iterations · Final reward: ${(results.reward_history?.slice(-1)[0]||0).toFixed(4)}` : '' },
+  ];
+
+  document.getElementById('stage-info-list').innerHTML = stages.map(s => `
+    <div class="stage-row">
+      <div class="stage-num">${s.num}</div>
+      <div class="stage-desc">
+        <div class="stage-name">${s.name}</div>
+        <div class="stage-detail-text">${s.detail}</div>
+      </div>
+    </div>`).join('');
+
+  // JSD chart
+  const jsdSeries = (details.s3 && details.s3.jsd_series) ? details.s3.jsd_series : [];
+  renderJsdChart(jsdSeries,
+    parseFloat(document.getElementById('cfg-jsd-low').value),
+    parseFloat(document.getElementById('cfg-jsd-high').value));
+
+  // RL reward chart
+  const rewardHistory = results.reward_history || [];
+  renderRlChart(rewardHistory);
+  renderRewardBreakdown(details.s7?.reward_breakdown || {});
+
+  const models = details.s6?.ensemble_models || [];
+  document.getElementById('ensemble-composition').textContent = models.length
+    ? `Models used: ${models.join(', ')}`
+    : `Fallback model: ${details.s6?.model || 'n/a'}`;
+
+  // Entity graph
+  const graphData = (details.s5 && details.s5.entity_graph) ? details.s5.entity_graph : null;
+  if (graphData) renderEntityGraph(graphData);
+}
+
+function renderJsdChart(series, tauLow, tauHigh) {
+  if (jsdChart) { jsdChart.destroy(); jsdChart = null; }
+  const ctx = document.getElementById('jsd-chart');
+  if (!ctx) return;
+  const labels = series.map((_, i) => `C${i}`);
+  const metricName = (document.getElementById('cfg-entropy-metric')?.value || 'jsd').toUpperCase();
+  jsdChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: `${metricName} Score`,
+          data: series,
+          borderColor: '#111111',
+          backgroundColor: 'rgba(255,230,0,0.12)',
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: `τ low (${tauLow})`,
+          data: series.map(() => tauLow),
+          borderColor: '#3d6a4d',
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+        },
+        {
+          label: `τ high (${tauHigh})`,
+          data: series.map(() => tauHigh),
+          borderColor: '#c9b900',
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#5f594f', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#7f776a', font: { size: 10 } }, grid: { color: '#e5dbca' } },
+        y: { min: 0, max: 1, ticks: { color: '#7f776a', font: { size: 10 } }, grid: { color: '#e5dbca' } },
+      },
+    },
+  });
+}
+
+function renderRlChart(history) {
+  if (rlChart) { rlChart.destroy(); rlChart = null; }
+  const ctx = document.getElementById('rl-chart');
+  if (!ctx) return;
+  const labels = history.map((_, i) => `Iter ${i}`);
+  rlChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Reward',
+        data: history,
+        borderColor: '#111111',
+        backgroundColor: 'rgba(255,230,0,0.12)',
+        borderWidth: 2,
+        pointRadius: 4,
+        tension: 0.3,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#5f594f', font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: '#7f776a', font: { size: 10 } }, grid: { color: '#e5dbca' } },
+        y: { ticks: { color: '#7f776a', font: { size: 10 } }, grid: { color: '#e5dbca' } },
+      },
+    },
+  });
+}
+
+function renderRewardBreakdown(breakdown) {
+  const el = document.getElementById('reward-breakdown');
+  if (!el) return;
+  if (!breakdown || Object.keys(breakdown).length === 0) {
+    el.textContent = 'No multi-objective reward breakdown available.';
+    return;
+  }
+  el.textContent = `Quality: ${((breakdown.quality||0)*100).toFixed(1)}% · Coverage: ${((breakdown.coverage||0)*100).toFixed(1)}% · Consistency: ${((breakdown.consistency||0)*100).toFixed(1)}% · Efficiency: ${((breakdown.efficiency||0)*100).toFixed(1)}% · Total: ${(breakdown.total||0).toFixed(4)}`;
+}
+
+function bindReactiveControls() {
+  const ids = [
+    'cfg-jsd-low','cfg-jsd-high','cfg-entropy-metric','cfg-hybrid-lambda',
+    'cfg-threshold-mode','cfg-pctl-low','cfg-pctl-high','cfg-sem'
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const eventName = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(eventName, () => {
+      if (state.results) renderInspector(state.results);
+    });
+  });
+}
+
+/* ── Entity Graph SVG ──────────────────────────────────────────────────── */
+function renderEntityGraph(graphData) {
+  const svg = document.getElementById('entity-graph-svg');
+  if (!svg) return;
+
+  const W = 800, H = 300;
+  const nodes = (graphData.nodes || []).slice(0, 40);
+  const edges = (graphData.edges || []).slice(0, 80);
+
+  if (!nodes.length) {
+    svg.innerHTML = '<text x="400" y="150" text-anchor="middle" fill="#7f776a" font-size="13">No entity connections detected.</text>';
+    return;
+  }
+
+  // Initial positions on circle
+  nodes.forEach((n, i) => {
+    const angle = (2 * Math.PI * i) / nodes.length - Math.PI / 2;
+    const r = Math.min(W, H) * 0.35;
+    n.x = W / 2 + r * Math.cos(angle);
+    n.y = H / 2 + r * Math.sin(angle);
+    n.vx = 0; n.vy = 0;
+  });
+
+  const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  // Force simulation
+  for (let iter = 0; iter < 80; iter++) {
+    // Repulsion
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x;
+        const dy = nodes[i].y - nodes[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = 600 / (dist * dist);
+        nodes[i].vx += (dx / dist) * force;
+        nodes[i].vy += (dy / dist) * force;
+        nodes[j].vx -= (dx / dist) * force;
+        nodes[j].vy -= (dy / dist) * force;
+      }
+    }
+    // Spring attraction on edges
+    edges.forEach(e => {
+      const a = nodeById[e.source], b = nodeById[e.target];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = dist * 0.008;
+      a.vx += (dx / dist) * force; a.vy += (dy / dist) * force;
+      b.vx -= (dx / dist) * force; b.vy -= (dy / dist) * force;
+    });
+    // Gravity toward centre
+    nodes.forEach(n => {
+      n.vx += (W / 2 - n.x) * 0.003;
+      n.vy += (H / 2 - n.y) * 0.003;
+    });
+    // Dampen & apply
+    nodes.forEach(n => {
+      n.vx *= 0.75; n.vy *= 0.75;
+      n.x = Math.max(22, Math.min(W - 22, n.x + n.vx));
+      n.y = Math.max(18, Math.min(H - 18, n.y + n.vy));
+    });
+  }
+
+  let html = '';
+  // Edges
+  edges.forEach(e => {
+    const a = nodeById[e.source], b = nodeById[e.target];
+    if (!a || !b) return;
+    html += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"
+             stroke="#bfbfbf" stroke-width="${1 + (e.weight || 1) * 0.5}" stroke-opacity="0.65"/>`;
+  });
+  // Nodes
+  nodes.forEach(n => {
+    const r = 10 + Math.min(n.entity_count * 1.5, 12);
+    html += `
+      <circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${r.toFixed(1)}"
+            fill="rgba(255,230,0,0.18)" stroke="#111111" stroke-width="1.5"/>
+          <text x="${n.x.toFixed(1)}" y="${(n.y + 4).toFixed(1)}" text-anchor="middle"
+          fill="#111111" font-size="10" font-weight="600">${n.label}</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+/* ── Export ────────────────────────────────────────────────────────────── */
+function enableExport() {
+  document.getElementById('export-empty').classList.add('hidden');
+  document.getElementById('export-content').classList.remove('hidden');
+}
+
+function doExport(fmt) {
+  if (!state.jobId) return;
+  const apiBase = document.getElementById('cfg-api').value.replace(/\/$/, '');
+  window.open(`${apiBase}/export/${state.jobId}/${fmt}`, '_blank');
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+function resetAll() {
+  state.documentId = null;
+  state.jobId = null;
+  state.results = null;
+  allChunks = [];
+  if (state.pollTimer) clearInterval(state.pollTimer);
+
+  document.getElementById('dz-text').textContent = 'Drop a file to begin the review';
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('file-info').textContent = '';
+  document.getElementById('progress-section').classList.add('hidden');
+  document.getElementById('summary-section').style.display = 'none';
+  document.getElementById('chunk-list').innerHTML =
+    '<div class="empty-state"><div class="empty-icon">▤</div><p>Run the pipeline to review findings.</p></div>';
+  document.getElementById('inspector-empty').classList.remove('hidden');
+  document.getElementById('inspector-content').classList.add('hidden');
+  document.getElementById('export-empty').classList.remove('hidden');
+  document.getElementById('export-content').classList.add('hidden');
+  fileInput.value = '';
+}
+
+/* ── Config ────────────────────────────────────────────────────────────── */
+function getConfig() {
+  return {
+    chunking_strategy: document.getElementById('cfg-strategy').value,
+    n_min: parseInt(document.getElementById('cfg-nmin').value),
+    n_max: parseInt(document.getElementById('cfg-nmax').value),
+    tau_jsd_low: parseFloat(document.getElementById('cfg-jsd-low').value),
+    tau_jsd_high: parseFloat(document.getElementById('cfg-jsd-high').value),
+    entropy_metric: document.getElementById('cfg-entropy-metric').value,
+    hybrid_lambda: parseFloat(document.getElementById('cfg-hybrid-lambda').value),
+    threshold_mode: document.getElementById('cfg-threshold-mode').value,
+    tau_percentile_low: parseInt(document.getElementById('cfg-pctl-low').value),
+    tau_percentile_high: parseInt(document.getElementById('cfg-pctl-high').value),
+    tau_sem: parseFloat(document.getElementById('cfg-sem').value),
+    max_iterations: parseInt(document.getElementById('cfg-maxiter').value),
+    alpha: parseFloat(document.getElementById('cfg-alpha').value),
+    beta: parseFloat(document.getElementById('cfg-beta').value),
+    lambda: parseFloat(document.getElementById('cfg-lambda').value),
+    embedding_model: document.getElementById('cfg-model').value,
+    ensemble_models: [
+      'all-MiniLM-L6-v2',
+      'all-mpnet-base-v2',
+      'jina-embeddings-v2-base-en',
+    ],
+  };
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────────── */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+let toastTimer = null;
+function showToast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 4000);
+}
+</script>
+</body>
+</html>

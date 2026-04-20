@@ -1,0 +1,29 @@
+pipeline:
+  entropy_metric: hybrid
+  hybrid_lambda: 0.6
+  threshold_mode: percentile
+  tau_percentile_low: 25
+  tau_percentile_high: 75
+  bootstrap_samples: 120
+  ensemble_models:
+    - all-MiniLM-L6-v2
+    - all-mpnet-base-v2
+    - jina-embeddings-v2-base-en
+  reward_objectives:
+    quality: 0.35
+    coverage: 0.30
+    consistency: 0.20
+    efficiency: 0.15
+  domain_keywords:
+    legal:
+      - recital
+      - covenant
+      - arbitration
+    medical:
+      - prognosis
+      - pathology
+      - pharmacology
+    academic:
+      - bibliography
+      - methodology
+      - longitudinal
