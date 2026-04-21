@@ -120,6 +120,67 @@ const ChartTooltip = ({ active, payload, label }) => {
   )
 }
 
+const S3_BOUNDARY_MEANINGS = {
+  hard: 'Strong topic or structure shift. Stage 3 kept this boundary.',
+  soft: 'Moderate shift. Stage 3 kept it, but later stages may still merge it.',
+  merged: 'Weak boundary. Stage 3 merged this chunk with the next candidate.',
+  end: 'Final chunk in the method output.',
+  single: 'Only one chunk was available for this method.',
+}
+
+function fmtPct(value) {
+  const n = Number(value || 0)
+  return `${Math.round(n * 100)}%`
+}
+
+function Stage3ChunkRow({ chunk, thresholds }) {
+  const [open, setOpen] = useState(false)
+  const type = chunk.boundary_type || 'unknown'
+  const signal = Number(chunk.boundary_signal || 0)
+  const reason = chunk.merge_reason || ''
+  const isProtected = reason === 'protected_structure_boundary'
+
+  return (
+    <div className={`s3-chunk-row ${type}`} onClick={() => setOpen(o => !o)}>
+      <div className="s3-chunk-main">
+        <div className="s3-chunk-index">S3-{chunk.index}</div>
+        <div className="s3-chunk-text">
+          <div className="s3-chunk-title">
+            <span className={`s3-boundary-pill ${type}`}>{type.replace(/_/g, ' ')}</span>
+            {isProtected && <span className="s3-boundary-pill protected">protected</span>}
+            <span>{chunk.token_count} tokens</span>
+            <span>signal {fmtPct(signal)}</span>
+          </div>
+          <div className="s3-chunk-preview">{chunk.preview || 'No preview available.'}</div>
+        </div>
+      </div>
+
+      <div className={`s3-chunk-details${open ? ' open' : ''}`}>
+        <div className="s3-meaning">{S3_BOUNDARY_MEANINGS[type] || 'Boundary label from Stage 3.'}</div>
+        <div className="s3-feature-grid">
+          {[
+            ['Selected metric', chunk.features?.selected_metric],
+            ['JSD', chunk.features?.jsd],
+            ['Hellinger', chunk.features?.hellinger],
+            ['Token overlap', chunk.features?.overlap],
+            ['Entropy delta', chunk.features?.entropy_delta],
+            ['Low threshold', thresholds?.low],
+            ['High threshold', thresholds?.high],
+          ].map(([label, value]) => (
+            <div className="s3-feature" key={label}>
+              <div>{Number(value || 0).toFixed(4)}</div>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+        {reason && (
+          <div className="s3-reason">Decision reason: <strong>{reason.replace(/_/g, ' ')}</strong></div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── Strategy score bar chart ────────────────────────────────────────── */
 function StrategyScoreChart({ scores }) {
   if (!scores || Object.keys(scores).length === 0) return null
@@ -165,11 +226,15 @@ export default function InspectorTab({ results, config }) {
   const s7       = details.s7 || {}
   const evalScores = s8.scores || {}
   const perStrategy = details.s3_s6 || {}
+  const s7Strategies = s7.strategies || {}
   const strategyNames = Object.keys(perStrategy)
-  const defaultStrategy = s8.winner || strategyNames[0] || ''
+  const defaultStrategy = s7.winner || s7.strategy || s8.winner || strategyNames[0] || ''
   const [activeStrategy, setActiveStrategy] = useState(defaultStrategy)
   const selectedStrategy = strategyNames.includes(activeStrategy) ? activeStrategy : defaultStrategy
   const selectedDetails = perStrategy[selectedStrategy] || {}
+  const selectedS7 = s7Strategies[selectedStrategy] || {}
+  const selectedS3Chunks = selectedDetails.s3_chunks || []
+  const selectedS3Stats = selectedDetails.s3_stats || {}
 
   const getS3S6Detail = name => {
     const d = perStrategy[name]
@@ -201,22 +266,25 @@ export default function InspectorTab({ results, config }) {
     },
     {
       num: 'S7', name: 'RL Reward Calibration',
-      detail: s7.iterations
+      detail: Object.keys(s7Strategies).length
+        ? `Ran on <strong>${Object.keys(s7Strategies).length}</strong> methods · Winner: <strong>${(s7.winner || s7.strategy || '').replace(/_/g, ' ')}</strong> · Final: ${(results.reward_history?.at(-1) || 0).toFixed(4)}`
+        : s7.iterations
         ? `${s7.iterations} iterations on <strong>${s7.strategy}</strong> · Final: ${(results.reward_history?.at(-1) || 0).toFixed(4)}`
         : '',
     },
   ]
 
-  const winnerName = s8.winner
+  const winnerName = s7.winner || s7.strategy || s8.winner
   const selectedJsd = selectedDetails.jsd_series || details.s3?.jsd_series || []
 
   const jsdData = selectedJsd.map((v, i) => ({ idx: `C${i}`, score: v }))
-  const rlData  = (results.reward_history || []).map((v, i) => ({ iter: `Iter ${i}`, reward: v }))
+  const activeRewardHistory = selectedS7.reward_history || results.reward_history || []
+  const rlData  = activeRewardHistory.map((v, i) => ({ iter: `Iter ${i}`, reward: v }))
 
   const tauLow  = config.tau_jsd_low  ?? 0.15
   const tauHigh = config.tau_jsd_high ?? 0.45
 
-  const breakdown = s7.reward_breakdown || {}
+  const breakdown = selectedS7.reward_breakdown || s7.reward_breakdown || {}
   const graphData = details.s5?.entity_graphs?.[selectedStrategy] || details.s5?.entity_graph || null
 
   return (
@@ -235,6 +303,17 @@ export default function InspectorTab({ results, config }) {
       {s8.table?.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <EvaluationTable table={s8.table} winner={s8.winner} />
+        </div>
+      )}
+
+      {s7.table?.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <EvaluationTable
+            table={s7.table}
+            winner={s7.winner || s7.strategy}
+            title="S7 RL Evaluation"
+            note="This ranks the chunking methods after RL calibration. The score is the final multi-objective reward for each method."
+          />
         </div>
       )}
 
@@ -259,12 +338,16 @@ export default function InspectorTab({ results, config }) {
             {[
               ['Initial', selectedDetails.initial_chunk_count],
               ['After S3', selectedDetails.s3_chunk_count],
+              ['S3 merged', selectedDetails.s3_merge_count],
+              ['S3 hard', selectedDetails.s3_hard_count],
+              ['Protected', selectedDetails.s3_protected_count],
               ['After S4', selectedDetails.s4_chunk_count],
               ['Final', selectedDetails.chunk_count],
               ['Mean tokens', selectedDetails.mean_tokens],
               ['Entities', selectedDetails.entity_count],
               ['Embedding dim', selectedDetails.embedding_dim],
               ['Boundary', selectedDetails.mean_boundary_score != null ? (selectedDetails.mean_boundary_score * 100).toFixed(1) + '%' : '—'],
+              ['S7 reward', selectedS7.final_reward != null ? selectedS7.final_reward.toFixed(4) : '—'],
             ].map(([label, value]) => (
               <div className="method-detail-card" key={label}>
                 <div className="method-detail-value">{value ?? '—'}</div>
@@ -275,12 +358,64 @@ export default function InspectorTab({ results, config }) {
         </div>
       )}
 
+      {selectedS3Chunks.length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <div className="card-title">
+            Stage 3 Boundary Refinement
+            {selectedStrategy && <span className="badge">{selectedStrategy.replace(/_/g, ' ')}</span>}
+          </div>
+          <div className="s3-explain-grid">
+            <div>
+              <strong>Hard</strong>
+              <span>clear boundary kept</span>
+            </div>
+            <div>
+              <strong>Soft</strong>
+              <span>uncertain boundary kept for S4</span>
+            </div>
+            <div>
+              <strong>Merged</strong>
+              <span>weak boundary removed</span>
+            </div>
+            <div>
+              <strong>Protected</strong>
+              <span>article/section boundary preserved</span>
+            </div>
+          </div>
+          <div className="s3-summary-strip">
+            {[
+              ['Initial', selectedS3Stats.initial_count],
+              ['After S3', selectedS3Stats.final_count],
+              ['Merged', selectedS3Stats.merged_count],
+              ['Hard', selectedS3Stats.hard_count],
+              ['Soft', selectedS3Stats.soft_count],
+              ['Protected', selectedS3Stats.protected_count],
+              ['Mean signal', selectedS3Stats.mean_signal != null ? fmtPct(selectedS3Stats.mean_signal) : '—'],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <strong>{value ?? '—'}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="s3-chunk-list">
+            {selectedS3Chunks.map(chunk => (
+              <Stage3ChunkRow
+                key={`${selectedStrategy}-${chunk.index}`}
+                chunk={chunk}
+                thresholds={selectedDetails.thresholds}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Charts */}
       <div className="inspector-grid" style={{ marginTop: 14 }}>
         {/* JSD */}
         <div className="card">
           <div className="card-title">
-            Boundary Entropy
+            Boundary Signal
             {selectedStrategy && <span className="badge">{selectedStrategy.replace(/_/g, ' ')}</span>}
           </div>
           <div className="chart-wrap">
@@ -293,7 +428,7 @@ export default function InspectorTab({ results, config }) {
                   <Tooltip content={<ChartTooltip />} />
                   <ReferenceLine y={tauLow}  stroke="var(--green)" strokeDasharray="4 3" label={{ value: `τ⁻ ${tauLow}`, position: 'right', fontSize: 9, fill: 'var(--green)' }} />
                   <ReferenceLine y={tauHigh} stroke="var(--amber)" strokeDasharray="4 3" label={{ value: `τ⁺ ${tauHigh}`, position: 'right', fontSize: 9, fill: 'var(--amber)' }} />
-                  <Line type="monotone" dataKey="score" name="JSD" stroke="#111" strokeWidth={2} dot={{ r: 2, fill: '#FFE600', stroke: '#111', strokeWidth: 1 }} activeDot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="score" name="Boundary signal" stroke="#111" strokeWidth={2} dot={{ r: 2, fill: '#FFE600', stroke: '#111', strokeWidth: 1 }} activeDot={{ r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -306,7 +441,10 @@ export default function InspectorTab({ results, config }) {
 
         {/* RL reward */}
         <div className="card">
-          <div className="card-title">RL Reward Curve</div>
+          <div className="card-title">
+            RL Reward Curve
+            {selectedStrategy && <span className="badge">{selectedStrategy.replace(/_/g, ' ')}</span>}
+          </div>
           <div className="chart-wrap">
             {rlData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">

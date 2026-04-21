@@ -51,8 +51,8 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
             </select>
           </div>
 
-          <SliderRow label="N_min (tokens)" min={20} max={300} value={config.n_min} onChange={v => set('n_min', v)} />
-          <SliderRow label="N_max (tokens)" min={100} max={1000} value={config.n_max} onChange={v => set('n_max', v)} />
+          <SliderRow label="N_min (tokens)" min={20} max={400} value={config.n_min} onChange={v => set('n_min', v)} />
+          <SliderRow label="N_max (tokens)" min={100} max={1200} value={config.n_max} onChange={v => set('n_max', v)} />
         </div>
 
         {/* Boundary */}

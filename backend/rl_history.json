@@ -13,5 +13,150 @@
       "efficiency": 0.3333,
       "total": 0.825
     }
+  },
+  "financial": {
+    "last_reward_components": {
+      "quality": 0.8503,
+      "coverage": 1.0,
+      "consistency": 0.0,
+      "efficiency": 0.4477,
+      "total": 0.6648
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.78,
+    "hybrid_lambda": 0.6,
+    "merge_weight": 0.04
+  },
+  "technical": {
+    "last_reward_components": {
+      "quality": 1.0,
+      "coverage": 1.0,
+      "consistency": 1.0,
+      "efficiency": 0.3333,
+      "total": 0.9
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.45,
+    "n_max": 220,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "education": {
+    "last_reward_components": {
+      "quality": 1.0,
+      "coverage": 1.0,
+      "consistency": 1.0,
+      "efficiency": 0.3333,
+      "total": 0.9
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "financial::recursive": {
+    "last_reward_components": {
+      "quality": 0.7163,
+      "coverage": 1.0,
+      "consistency": 0.6616,
+      "efficiency": 0.776,
+      "total": 0.7994
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "financial::sliding_window": {
+    "last_reward_components": {
+      "quality": 0.6934,
+      "coverage": 1.0,
+      "consistency": 0.8998,
+      "efficiency": 0.6758,
+      "total": 0.824
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "financial::structure": {
+    "last_reward_components": {
+      "quality": 0.8514,
+      "coverage": 1.0,
+      "consistency": 0.7701,
+      "efficiency": 0.7496,
+      "total": 0.8644
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.575,
+    "merge_weight": 0.12
+  },
+  "financial::semantic_boundaries": {
+    "last_reward_components": {
+      "quality": 0.8798,
+      "coverage": 1.0,
+      "consistency": 0.2356,
+      "efficiency": 0.0,
+      "total": 0.6551
+    },
+    "tau_jsd_low": 0.13999999999999999,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6,
+    "merge_weight": 0.16
+  },
+  "financial::sentence_clustering": {
+    "last_reward_components": {
+      "quality": 0.8806,
+      "coverage": 1.0,
+      "consistency": 0.3174,
+      "efficiency": 0.0,
+      "total": 0.6717
+    },
+    "tau_jsd_low": 0.13999999999999999,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6,
+    "merge_weight": 0.16
+  },
+  "financial::paragraph_pack": {
+    "last_reward_components": {
+      "quality": 0.7047,
+      "coverage": 1.0,
+      "consistency": 0.7652,
+      "efficiency": 0.7383,
+      "total": 0.8104
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "financial::legal_articles": {
+    "last_reward_components": {
+      "quality": 0.8514,
+      "coverage": 1.0,
+      "consistency": 0.7701,
+      "efficiency": 0.7496,
+      "total": 0.8644
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 500,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.575,
+    "merge_weight": 0.12
   }
 }

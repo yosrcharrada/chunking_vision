@@ -8,8 +8,9 @@ or arbitrary cuts through sentences/code blocks.
 """
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -92,14 +93,25 @@ def run_all_chunkers(text: str, doc_type: str, config: Dict[str, Any]) -> Dict[s
         tasks["legal_articles"] = lambda: legal_article_split(text, eff_min, eff_max)
 
     out: Dict[str, List[Dict]] = {}
+    timings: Dict[str, float] = {}
     with ThreadPoolExecutor(max_workers=min(len(tasks), 8)) as ex:
-        futures = {name: ex.submit(fn) for name, fn in tasks.items()}
+        futures = {name: ex.submit(_timed_chunker, fn) for name, fn in tasks.items()}
         for name, fut in futures.items():
             try:
-                out[name] = _quality_pass(fut.result(), text, eff_min, eff_max, name)
+                chunks, seconds = fut.result()
+                timings[name] = seconds
+                out[name] = _quality_pass(chunks, text, eff_min, eff_max, name)
             except Exception:
+                timings[name] = 0.0
                 out[name] = []
+    config["_stage2_timings"] = timings
     return out
+
+
+def _timed_chunker(fn: Callable[[], List[Dict]]) -> Tuple[List[Dict], float]:
+    start = time.perf_counter()
+    chunks = fn()
+    return chunks, round(time.perf_counter() - start, 4)
 
 
 def select_best_strategy(all_chunks: Dict[str, List[Dict]], doc_type: str, config: Dict[str, Any]) -> List[Dict]:

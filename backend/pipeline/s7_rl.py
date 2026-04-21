@@ -119,10 +119,11 @@ def run_rl_loop(
     model_name = config.get("embedding_model", "all-MiniLM-L6-v2")
     doc_type = doc_profile.get("type", "prose")
     domain = doc_profile.get("domain", "general")
+    history_key = str(config.get("rl_history_key") or domain)
     objective_weights = _objective_weights(config)
     history = _load_history()
 
-    warm_cfg = _warm_start_config(config, history, domain)
+    warm_cfg = _warm_start_config(config, history, history_key)
     probe_queries = _generate_probes(text, n=6)
     agent = DQNAgent(
         state_dim=8,
@@ -194,7 +195,8 @@ def run_rl_loop(
     final_cfg["reward_history_breakdown"] = reward_breakdown
     final_cfg["dqn_action_space"] = {"discrete": len(agent.ACTIONS), "continuous_magnitudes": agent.MAGNITUDES}
     final_cfg["replay_buffer_size"] = len(agent.replay)
-    _save_history(domain, final_cfg, best_components)
+    final_cfg["rl_history_key"] = history_key
+    _save_history(history_key, final_cfg, best_components)
     return best_chunks, reward_history, final_cfg
 
 

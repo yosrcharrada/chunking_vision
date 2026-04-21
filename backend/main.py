@@ -14,6 +14,7 @@ import threading
 import traceback
 import logging
 import os
+import time
 from typing import Any, Dict, List
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -43,8 +44,8 @@ job_store: Dict[str, Dict] = {}   # job_id      → {status, stage, progress, �
 
 # ── Default pipeline configuration ───────────────────────────────────────
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "n_min": 100,
-    "n_max": 500,
+    "n_min": 50,
+    "n_max": 1000,
     "tau_jsd_low": 0.15,
     "tau_jsd_high": 0.45,
     "tau_sem": 0.75,
@@ -118,26 +119,30 @@ def _parse_file(filename: str, content: bytes) -> str:
 
 
 def _parse_pdf(content: bytes) -> str:
-    # Try pdfplumber first, then PyPDF2
+    # PyPDF2 is much faster for upload/pipeline startup. pdfplumber is kept as
+    # a fallback for PDFs where the fast extractor finds little/no text.
     pages: List[str] = []
     try:
-        import pdfplumber  # noqa: E402
-        with pdfplumber.open(io.BytesIO(content)) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    pages.append(text)
+        import PyPDF2  # noqa: E402
+        reader = PyPDF2.PdfReader(io.BytesIO(content))
+        pages = [
+            reader.pages[i].extract_text() or ""
+            for i in range(len(reader.pages))
+        ]
     except Exception:
         pass
 
-    if not pages:
+    if sum(len(p.strip()) for p in pages) < 200:
         try:
-            import PyPDF2  # noqa: E402
-            reader = PyPDF2.PdfReader(io.BytesIO(content))
-            pages = [
-                reader.pages[i].extract_text() or ""
-                for i in range(len(reader.pages))
-            ]
+            import pdfplumber  # noqa: E402
+            plumber_pages: List[str] = []
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        plumber_pages.append(text)
+            if sum(len(p.strip()) for p in plumber_pages) > sum(len(p.strip()) for p in pages):
+                pages = plumber_pages
         except Exception:
             pass
 
@@ -257,7 +262,37 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
             _update_job(job_id, status="error", error="Document not found.")
             return
 
-        text: str = doc["content"]
+        text: str = doc.get("content") or ""
+        if not text.strip() and doc.get("raw_content") is not None:
+            _update_job(
+                job_id,
+                stage="S1",
+                progress=2,
+                message="Extracting text from uploaded file…",
+            )
+            parse_start = time.perf_counter()
+            text = _parse_file(doc.get("filename") or "upload.txt", doc["raw_content"])
+            doc["content"] = text
+            doc["token_count"] = len(text.split())
+            logger.info(
+                json.dumps(
+                    {
+                        "job_id": job_id,
+                        "event": "document_parsed",
+                        "filename": doc.get("filename"),
+                        "seconds": round(time.perf_counter() - parse_start, 3),
+                        "tokens": doc["token_count"],
+                    }
+                )
+            )
+        if not text.strip():
+            _update_job(
+                job_id,
+                status="error",
+                message="Could not extract text from the uploaded file.",
+                error="Could not extract text from the uploaded file.",
+            )
+            return
         config = {**DEFAULT_CONFIG, **_validate_user_config(user_config), "job_id": job_id}
 
         # ── S1: Profile ───────────────────────────────────────────────────
@@ -381,6 +416,7 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                 "chunk_count": winning_output["details"].get("s3_chunk_count", 0),
                 "metric": config.get("entropy_metric", "jsd"),
                 "thresholds": winning_output["details"].get("thresholds", {}),
+                "stats": winning_output["details"].get("s3_stats", {}),
             },
             "s4": {
                 "chunk_count": winning_output["details"].get("s4_chunk_count", 0),
@@ -410,16 +446,53 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
             stage_details=stage_details,
         )
 
-        # ── S7: RL reward calibration ─────────────────────────────────────
+        # ── S7: RL reward calibration per strategy ────────────────────────
         _update_job(
             job_id,
             stage="S7",
             progress=82,
-            message=f"Running RL calibration on {winner.replace('_', ' ')}…",
+            message="Running RL calibration for every chunking method…",
         )
-        best_chunks, reward_history, final_config = run_rl_loop(
-            text, doc_profile, embedded, config
-        )
+        s7_outputs: Dict[str, Dict[str, Any]] = {}
+        total_methods = max(len(strategy_outputs), 1)
+        for idx, (name, output) in enumerate(strategy_outputs.items(), start=1):
+            _update_job(
+                job_id,
+                stage="S7",
+                progress=82 + int(10 * idx / total_methods),
+                message=f"Running RL calibration on {name.replace('_', ' ')}…",
+            )
+            work_config = dict(config)
+            work_config["chunking_strategy"] = name
+            work_config["rl_history_key"] = f"{doc_profile.get('domain', 'general')}::{name}"
+            best_chunks, reward_history, final_config = run_rl_loop(
+                text,
+                doc_profile,
+                output.get("chunks", []),
+                work_config,
+            )
+            s7_outputs[name] = {
+                "chunks": best_chunks,
+                "reward_history": reward_history,
+                "final_config": final_config,
+                "reward_breakdown": final_config.get("reward_breakdown", {}),
+                "iterations": len(reward_history),
+                "final_reward": reward_history[-1] if reward_history else 0.0,
+            }
+
+        s7_table, s7_ranked = _evaluate_s7_outputs(s7_outputs, config)
+        forced_strategy = str(config.get("chunking_strategy", "auto")).lower()
+        if forced_strategy != "auto" and forced_strategy in s7_outputs:
+            final_winner = forced_strategy
+        else:
+            final_winner = s7_ranked[0][0] if s7_ranked else winner
+        for row in s7_table:
+            row["winner"] = row.get("strategy") == final_winner
+
+        final_s7 = s7_outputs.get(final_winner) or next(iter(s7_outputs.values()))
+        best_chunks = final_s7["chunks"]
+        reward_history = final_s7["reward_history"]
+        final_config = final_s7["final_config"]
 
         _update_job(
             job_id,
@@ -430,7 +503,25 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                     "iterations": len(reward_history),
                     "final_config": final_config,
                     "reward_breakdown": final_config.get("reward_breakdown", {}),
-                    "strategy": winner,
+                    "strategy": final_winner,
+                    "winner": final_winner,
+                    "ranked": s7_ranked,
+                    "table": s7_table,
+                    "strategies": {
+                        name: {
+                            "iterations": out["iterations"],
+                            "final_reward": out["final_reward"],
+                            "reward_history": out["reward_history"],
+                            "reward_breakdown": out["reward_breakdown"],
+                            "final_config": out["final_config"],
+                            "chunk_count": len(out["chunks"]),
+                            "mean_tokens": round(
+                                sum(len(c.get("text", "").split()) for c in out["chunks"]) / len(out["chunks"]),
+                                2,
+                            ) if out["chunks"] else 0,
+                        }
+                        for name, out in s7_outputs.items()
+                    },
                 },
             },
         )
@@ -464,14 +555,20 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                 "mean_chunk_score": round(mean_score, 4),
                 "rl_iterations": len(reward_history),
                 "final_reward": reward_history[-1] if reward_history else 0.0,
-                "winning_strategy": winner,
+                "winning_strategy": final_winner,
+                "s8_winning_strategy": winner,
                 "stage2_winning_strategy": selected_strategy,
                 "evaluated_strategies": len(evaluation_table),
             },
             "stage_details": job_store[job_id].get("stage_details", {}),
             "reward_history": reward_history,
+            "reward_histories": {
+                name: out["reward_history"]
+                for name, out in s7_outputs.items()
+            },
             "strategy_evaluation": evaluation_table,
             "stage2_evaluation": stage2_table,
+            "s7_evaluation": s7_table,
         }
 
         _update_job(
@@ -506,6 +603,8 @@ def _run_s3_s6_for_strategy(
     work_config["chunking_strategy"] = strategy_name
     refined = refine_boundaries(chunks, work_config)
     jsd_series = get_jsd_series(refined)
+    s3_stats = refined[-1].get("s3_stats", {}) if refined else {}
+    s3_chunks = _summarize_s3_chunks(refined)
     filtered = filter_boundaries(refined, doc_profile["type"], [], work_config)
     enriched = enrich_graph(filtered, [], work_config)
     graph_data = build_entity_graph_data(enriched)
@@ -528,8 +627,15 @@ def _run_s3_s6_for_strategy(
         "chunk_count": len(embedded),
         "mean_tokens": round(sum(token_counts) / len(token_counts), 2) if token_counts else 0,
         "jsd_series": jsd_series,
+        "s3_chunks": s3_chunks,
+        "s3_stats": s3_stats,
         "metric": work_config.get("entropy_metric", "jsd"),
         "thresholds": refined[-1].get("thresholds", {}) if refined else {},
+        "s3_merge_count": s3_stats.get("merged_count", 0),
+        "s3_hard_count": s3_stats.get("hard_count", 0),
+        "s3_soft_count": s3_stats.get("soft_count", 0),
+        "s3_protected_count": s3_stats.get("protected_count", 0),
+        "s3_mean_signal": s3_stats.get("mean_signal", 0.0),
         "mean_boundary_score": round(sum(boundary_scores) / len(boundary_scores), 4) if boundary_scores else 0.0,
         "mean_icc": round(sum(icc_scores) / len(icc_scores), 4) if icc_scores else 0.0,
         "embedding_dim": len(embeddings[0]) if embeddings else 0,
@@ -556,6 +662,13 @@ def _evaluate_stage2_outputs(
             "mean_tokens": row["mean_tokens"],
             "size_fit": row["size_fit"],
             "coverage": row["coverage"],
+            "count_fit": row["count_fit"],
+            "boundary_quality": row["boundary_quality"],
+            "structure_integrity": row["structure_integrity"],
+            "cohesion": row["cohesion"],
+            "distinctness": row["distinctness"],
+            "chunking_time": row["chunking_time"],
+            "time_efficiency": row["time_efficiency"],
         }
 
     rows.sort(key=lambda r: r["score"], reverse=True)
@@ -564,6 +677,35 @@ def _evaluate_stage2_outputs(
         row["rank"] = idx
         row["winner"] = idx == 1
     return rows, scores, ranked
+
+
+def _summarize_s3_chunks(chunks: List[Dict], limit: int = 240) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        text = chunk.get("text", "") or ""
+        features = chunk.get("boundary_features", {}) or {}
+        out.append(
+            {
+                "index": idx,
+                "token_count": len(text.split()),
+                "start": int(chunk.get("start", 0) or 0),
+                "end": int(chunk.get("end", 0) or 0),
+                "boundary_type": chunk.get("boundary_type", "unknown"),
+                "merge_reason": chunk.get("merge_reason", ""),
+                "boundary_signal": float(chunk.get("boundary_signal", chunk.get("hidden_state", 0.0)) or 0.0),
+                "metric_score": float(chunk.get("metric_score", 0.0) or 0.0),
+                "jsd_score": float(chunk.get("jsd_score", 0.0) or 0.0),
+                "features": {
+                    "selected_metric": float(features.get("selected_metric", 0.0) or 0.0),
+                    "jsd": float(features.get("jsd", 0.0) or 0.0),
+                    "hellinger": float(features.get("hellinger", 0.0) or 0.0),
+                    "overlap": float(features.get("overlap", 0.0) or 0.0),
+                    "entropy_delta": float(features.get("entropy_delta", 0.0) or 0.0),
+                },
+                "preview": re.sub(r"\s+", " ", text).strip()[:limit],
+            }
+        )
+    return out
 
 
 def _score_stage2_strategy(
@@ -589,6 +731,13 @@ def _score_stage2_strategy(
         "size_fit": 0.0,
         "coverage": 0.0,
         "count_fit": 0.0,
+        "boundary_quality": 0.0,
+        "structure_integrity": 0.0,
+        "cohesion": 0.0,
+        "non_redundancy": 0.0,
+        "distinctness": 0.0,
+        "chunking_time": 0.0,
+        "time_efficiency": 0.0,
     }
     if not chunks:
         return empty
@@ -606,18 +755,24 @@ def _score_stage2_strategy(
 
     count_fit = 1.0 - min(1.0, abs(len(chunks) - expected_count) / max(expected_count, 1.0))
     coverage = _span_coverage(chunks, len(full_text))
+    span_non_redundancy = _span_non_redundancy(chunks, len(full_text))
+    token_distinctness = _stage2_token_distinctness(chunks)
+    distinctness = 0.45 * span_non_redundancy + 0.55 * token_distinctness
     boundary_quality = _stage2_boundary_quality(chunks)
-    separation = _stage2_separation(chunks)
+    structure_integrity = _stage2_structure_integrity(chunks, full_text)
     cohesion = _stage2_cohesion(chunks)
-    boundary_signal = separation * min(1.0, len(chunks) / max(expected_count * 0.45, 1.0))
+    chunking_time = float((config.get("_stage2_timings") or {}).get(strategy_name, 0.0) or 0.0)
+    time_efficiency = 1.0 / (1.0 + chunking_time)
 
     score = (
-        0.32 * size_fit
-        + 0.20 * count_fit
-        + 0.16 * coverage
-        + 0.14 * boundary_quality
-        + 0.10 * separation
-        + 0.08 * cohesion
+        0.23 * size_fit
+        + 0.18 * count_fit
+        + 0.17 * boundary_quality
+        + 0.14 * structure_integrity
+        + 0.12 * cohesion
+        + 0.09 * distinctness
+        + 0.04 * coverage
+        + 0.03 * time_efficiency
     )
     return {
         "strategy": strategy_name,
@@ -627,12 +782,19 @@ def _score_stage2_strategy(
         "chunk_count": len(chunks),
         "mean_tokens": round(mean_tokens, 1),
         "mean_icc": round(float(cohesion), 4),
-        "inter_separation": round(float(separation), 4),
-        "entropy_strength": round(float(boundary_signal), 4),
+        "inter_separation": round(float(distinctness), 4),
+        "entropy_strength": round(float(count_fit), 4),
         "boundary_distinctiveness": round(float(boundary_quality), 4),
         "size_fit": round(float(max(0.0, min(1.0, size_fit))), 4),
         "coverage": round(float(coverage), 4),
         "count_fit": round(float(count_fit), 4),
+        "boundary_quality": round(float(boundary_quality), 4),
+        "structure_integrity": round(float(structure_integrity), 4),
+        "cohesion": round(float(cohesion), 4),
+        "non_redundancy": round(float(span_non_redundancy), 4),
+        "distinctness": round(float(distinctness), 4),
+        "chunking_time": round(float(chunking_time), 4),
+        "time_efficiency": round(float(time_efficiency), 4),
     }
 
 
@@ -658,6 +820,33 @@ def _evaluate_strategy_outputs(
         row["rank"] = idx
         row["winner"] = idx == 1
     return rows, scores, ranked
+
+
+def _evaluate_s7_outputs(
+    outputs: Dict[str, Dict[str, Any]],
+    config: Dict[str, Any],
+) -> tuple:
+    rows: List[Dict[str, Any]] = []
+    for name, output in outputs.items():
+        chunks = output.get("chunks", [])
+        row = _score_strategy(name, chunks, config)
+        final_reward = float(output.get("final_reward", 0.0) or 0.0)
+        row["score"] = round(max(0.0, min(1.0, final_reward)), 4)
+        row["rl_final_reward"] = round(final_reward, 4)
+        row["iterations"] = int(output.get("iterations", 0) or 0)
+        breakdown = output.get("reward_breakdown", {}) or {}
+        row["reward_quality"] = float(breakdown.get("quality", 0.0) or 0.0)
+        row["reward_coverage"] = float(breakdown.get("coverage", 0.0) or 0.0)
+        row["reward_consistency"] = float(breakdown.get("consistency", 0.0) or 0.0)
+        row["reward_efficiency"] = float(breakdown.get("efficiency", 0.0) or 0.0)
+        rows.append(row)
+
+    rows.sort(key=lambda r: r["score"], reverse=True)
+    ranked = [(r["strategy"], r["score"]) for r in rows]
+    for idx, row in enumerate(rows, start=1):
+        row["rank"] = idx
+        row["winner"] = idx == 1
+    return rows, ranked
 
 
 def _score_strategy(strategy_name: str, chunks: List[Dict], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -746,6 +935,32 @@ def _span_coverage(chunks: List[Dict], text_len: int) -> float:
     return float(max(0.0, min(1.0, covered / text_len)))
 
 
+def _span_non_redundancy(chunks: List[Dict], text_len: int) -> float:
+    if text_len <= 0:
+        return 0.0
+    spans = []
+    raw_span_chars = 0
+    for chunk in chunks:
+        start = int(chunk.get("start", 0) or 0)
+        end = int(chunk.get("end", 0) or 0)
+        if end > start:
+            start = max(0, start)
+            end = min(text_len, end)
+            spans.append((start, end))
+            raw_span_chars += max(0, end - start)
+    if not spans or raw_span_chars <= 0:
+        return 0.0
+    spans.sort()
+    merged = []
+    for start, end in spans:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+    unique_chars = sum(end - start for start, end in merged)
+    return float(max(0.0, min(1.0, unique_chars / raw_span_chars)))
+
+
 def _stage2_boundary_quality(chunks: List[Dict]) -> float:
     if not chunks:
         return 0.0
@@ -760,6 +975,76 @@ def _stage2_boundary_quality(chunks: List[Dict]) -> float:
         end_ok = last in {".", "!", "?", ":", ";", "}", "]", "`"} or len(text.split()) < 30
         good += 0.55 * float(start_ok) + 0.45 * float(end_ok)
     return good / len(chunks)
+
+
+def _stage2_structure_integrity(chunks: List[Dict], full_text: str) -> float:
+    anchors = list(
+        re.finditer(
+            r"(?im)^\s*(?:"
+            r"(?:article|art\.?)\s+\d+(?:\s*(?:er|e|ème|bis|ter|quater))?"
+            r"|(?:titre|chapitre|section|sous-section|paragraphe)\s+(?:[ivxlcdm]+|\d+|premier|première)"
+            r"|#{1,6}\s+\S+"
+            r"|\d+(?:\.\d+){1,3}\s+\S+"
+            r")",
+            full_text,
+        )
+    )
+    if not anchors:
+        return _stage2_boundary_quality(chunks)
+
+    chunk_starts = sorted(max(0, int(c.get("start", 0) or 0)) for c in chunks)
+    if not chunk_starts:
+        return 0.0
+
+    aligned = 0
+    tolerance = 80
+    for anchor in anchors:
+        pos = anchor.start()
+        if any(abs(start - pos) <= tolerance for start in chunk_starts):
+            aligned += 1
+    anchor_alignment = aligned / len(anchors)
+
+    split_penalties = []
+    for idx, anchor in enumerate(anchors):
+        start = anchor.start()
+        end = anchors[idx + 1].start() if idx + 1 < len(anchors) else len(full_text)
+        if end <= start:
+            continue
+        boundaries_inside = sum(1 for cs in chunk_starts if start + tolerance < cs < end - tolerance)
+        unit_words = max(1, len(full_text[start:end].split()))
+        expected_splits = max(1, round(unit_words / 420))
+        split_penalties.append(1.0 - min(1.0, max(0, boundaries_inside - expected_splits) / max(expected_splits, 1)))
+
+    unit_integrity = sum(split_penalties) / len(split_penalties) if split_penalties else 1.0
+    return float(max(0.0, min(1.0, 0.62 * anchor_alignment + 0.38 * unit_integrity)))
+
+
+def _stage2_token_distinctness(chunks: List[Dict]) -> float:
+    if len(chunks) < 2:
+        return 1.0
+    vals: List[float] = []
+    for idx in range(len(chunks) - 1):
+        a = _content_token_set(chunks[idx].get("text", ""))
+        b = _content_token_set(chunks[idx + 1].get("text", ""))
+        if not a or not b:
+            vals.append(0.7)
+            continue
+        overlap = len(a & b) / max(1, min(len(a), len(b)))
+        vals.append(1.0 - min(1.0, overlap))
+    return float(max(0.0, min(1.0, sum(vals) / len(vals)))) if vals else 1.0
+
+
+def _content_token_set(text: str) -> set:
+    stop = {
+        "the", "and", "for", "that", "with", "from", "this", "dans", "pour",
+        "avec", "des", "les", "une", "sur", "par", "aux", "que", "est",
+        "article", "titre", "chapitre", "section",
+    }
+    return {
+        tok
+        for tok in re.findall(r"\b[\wÀ-ÿ]{3,}\b", text.lower())
+        if tok not in stop and not tok.isdigit()
+    }
 
 
 def _stage2_separation(chunks: List[Dict]) -> float:
@@ -824,29 +1109,40 @@ def _finalise_chunks(chunks: list) -> list:
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)) -> JSONResponse:
-    """Accept a file upload and store its parsed text content."""
+    """Accept a file upload. PDFs defer text extraction until pipeline start."""
+    upload_start = time.perf_counter()
     content = await file.read()
     if len(content) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(413, "File too large (max 50 MB).")
 
-    text = _parse_file(file.filename or "upload.txt", content)
-    if not text.strip():
-        raise HTTPException(400, "Could not extract text from the uploaded file.")
+    filename = file.filename or "upload.txt"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
+    text = ""
+    token_count = None
+    if ext != "pdf":
+        text = _parse_file(filename, content)
+        if not text.strip():
+            raise HTTPException(400, "Could not extract text from the uploaded file.")
+        token_count = len(text.split())
 
     doc_id = str(uuid.uuid4())
     doc_store[doc_id] = {
-        "filename": file.filename,
+        "filename": filename,
         "content": text,
+        "raw_content": content if ext == "pdf" else None,
         "size": len(content),
         "content_type": file.content_type or "application/octet-stream",
+        "token_count": token_count,
     }
 
     return JSONResponse(
         {
             "document_id": doc_id,
-            "filename": file.filename,
-            "char_count": len(text),
-            "token_count": len(text.split()),
+            "filename": filename,
+            "char_count": len(text) if text else None,
+            "token_count": token_count,
+            "parse_deferred": ext == "pdf",
+            "upload_seconds": round(time.perf_counter() - upload_start, 3),
         }
     )
 

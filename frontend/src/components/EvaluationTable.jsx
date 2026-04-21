@@ -1,4 +1,4 @@
-const METRIC_COLS = [
+const DEFAULT_METRIC_COLS = [
   { key: 'mean_icc',               label: 'Coherence' },
   { key: 'inter_separation',       label: 'Separation' },
   { key: 'entropy_strength',       label: 'Entropy' },
@@ -6,7 +6,7 @@ const METRIC_COLS = [
   { key: 'size_fit',               label: 'Size Fit' },
 ]
 
-export default function EvaluationTable({ table, winner, title = 'Strategy Evaluation', note }) {
+export default function EvaluationTable({ table, winner, title = 'Strategy Evaluation', note, metricCols = DEFAULT_METRIC_COLS }) {
   if (!table || table.length === 0) return null
 
   return (
@@ -45,7 +45,7 @@ export default function EvaluationTable({ table, winner, title = 'Strategy Evalu
 
             {/* Mini metric bars */}
             <div className="eval-metrics-mini">
-              {METRIC_COLS.map(({ key, label }) => {
+              {metricCols.map(({ key, label }) => {
                 const val = row[key] || 0
                 return (
                   <div className="eval-mini-bar-row" key={key}>

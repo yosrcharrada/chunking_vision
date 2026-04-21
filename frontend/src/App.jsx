@@ -7,8 +7,8 @@ import ExportTab from './components/ExportTab'
 
 const DEFAULT_CONFIG = {
   chunking_strategy: 'auto',
-  n_min: 100,
-  n_max: 500,
+  n_min: 50,
+  n_max: 1000,
   tau_jsd_low: 0.15,
   tau_jsd_high: 0.45,
   entropy_metric: 'hybrid',

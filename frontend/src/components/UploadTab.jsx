@@ -12,6 +12,15 @@ const DOC_METRICS = [
   { key: 'BI', label: 'Block Integrity' },
   { key: 'SC', label: 'Size Regularity' },
 ]
+const STAGE2_METRICS = [
+  { key: 'size_fit', label: 'Size Fit' },
+  { key: 'count_fit', label: 'Count Fit' },
+  { key: 'boundary_quality', label: 'Boundary' },
+  { key: 'structure_integrity', label: 'Structure' },
+  { key: 'cohesion', label: 'Cohesion' },
+  { key: 'distinctness', label: 'Distinct' },
+  { key: 'time_efficiency', label: 'Speed' },
+]
 
 function normalizeStageKey(stage) {
   if (['S3', 'S4', 'S5', 'S6', 'S3-S6'].includes(stage)) return 'S3-S6'
@@ -48,8 +57,11 @@ export default function UploadTab({
       if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed')
       const data = await res.json()
       setDocumentId(data.document_id)
-      setTokenCount(data.token_count)
-      showToast(`✓ Uploaded ${file.name} — ${data.token_count.toLocaleString()} tokens`, 'success')
+      setTokenCount(data.token_count ?? null)
+      const tokenLabel = data.token_count != null
+        ? ` — ${data.token_count.toLocaleString()} tokens`
+        : ' — text extraction will run with analysis'
+      showToast(`✓ Uploaded ${file.name}${tokenLabel}`, 'success')
     } catch (err) {
       showToast(`Upload failed: ${err.message}`, 'error')
       setFileName(null)
@@ -295,7 +307,8 @@ function SummarySection({ results, setActiveTab }) {
           table={evalTable}
           winner={stage2Winner}
           title="Stage 2 Chunking Evaluation"
-          note="This scores raw Stage 2 chunk candidates before S3-S7. Score blends size fit, expected chunk count, document coverage, boundary quality, separation, and local coherence."
+          metricCols={STAGE2_METRICS}
+          note="This scores raw Stage 2 chunk candidates before entropy, embeddings, retrieval, RL, or ground-truth QA. Score blends size distribution, expected chunk count, boundary integrity, structure preservation, local cohesion, token distinctness, coverage sanity, and chunking speed."
         />
       )}
     </>
