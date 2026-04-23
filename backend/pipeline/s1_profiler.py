@@ -1,15 +1,24 @@
 """
 S1 — Document Profiler
 Expanded domain detection, adaptive metric weighting, and uncertainty estimates.
+
+This module analyzes document characteristics to guide downstream chunking decisions:
+- Classifies document type (code, table, mixed, prose)
+- Identifies domain (legal, medical, academic, etc.)
+- Computes five quality metrics: RC, ICC, DCC, BI, SC
+- Provides domain-specific metric weights
+- Estimates confidence via bootstrap sampling
+- Suggests optimal hyperparameters based on document properties
 """
 
-import hashlib
-import re
-from typing import Dict, Any, List, Tuple
+import hashlib  # For stable hashing of tokens in embeddings
+import re  # Regular expressions for text pattern matching
+from typing import Dict, Any, List, Tuple  # Type hints
 
-import numpy as np
+import numpy as np  # Numerical computations and statistics
 
-
+# English and French stopwords used to filter content tokens
+# These are common words that don't carry semantic meaning
 STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "is", "are", "was", "were", "be",
     "been", "being", "have", "has", "had", "do", "does", "did", "will",
@@ -34,21 +43,21 @@ STRUCTURAL_BOUNDARY_RE = re.compile(
 
 
 DOMAIN_KEYWORDS: Dict[str, List[str]] = {
-    "legal": ["statute", "clause", "agreement", "liability", "jurisdiction", "indemnity", "contract", "hereby"],
-    "medical": ["patient", "diagnosis", "treatment", "clinical", "therapy", "symptom", "hospital", "dosage"],
-    "academic": ["abstract", "methodology", "citation", "hypothesis", "literature", "peer review", "thesis", "dataset"],
-    "financial": ["revenue", "profit", "loss", "equity", "fiscal", "balance sheet", "cash flow", "valuation"],
-    "technical": ["algorithm", "api", "repository", "deployment", "protocol", "database", "framework", "runtime"],
-    "narrative": ["chapter", "character", "plot", "scene", "dialogue", "protagonist", "story", "novel"],
-    "scientific": ["experiment", "variable", "control group", "statistical", "finding", "evidence", "sample", "observation"],
-    "regulatory": ["compliance", "regulation", "audit", "governance", "policy", "risk", "control", "obligation"],
-    "marketing": ["campaign", "conversion", "audience", "brand", "segmentation", "retention", "funnel", "roi"],
-    "education": ["curriculum", "assessment", "learning", "student", "teacher", "pedagogy", "course", "instruction"],
-    "cybersecurity": ["vulnerability", "threat", "malware", "encryption", "incident", "firewall", "authentication", "exploit"],
-    "product": ["roadmap", "feature", "release", "user story", "backlog", "ux", "adoption", "prioritization"],
-    "operations": ["workflow", "throughput", "sla", "capacity", "scheduling", "logistics", "inventory", "downtime"],
-    "policy": ["guideline", "directive", "standards", "framework", "mandate", "protocol", "code of conduct", "principle"],
-    "research": ["benchmark", "model", "inference", "evaluation", "baseline", "ablation", "metric", "corpus"],
+    "legal": ["statute", "clause", "agreement", "liability", "jurisdiction", "indemnity", "contract", "hereby","statut", "clause", "accord", "responsabilité", "juridiction", "contrat", "par le présent"],
+    "medical": ["patient", "diagnosis", "treatment", "clinical", "therapy", "symptom", "hospital", "dosage", "patient", "diagnostic", "traitement", "clinique", "thérapie", "symptôme", "hôpital"],
+    "academic": ["abstract", "methodology", "citation", "hypothesis", "literature", "peer review", "thesis", "dataset", "résumé", "méthodologie", "citation", "hypothèse", "littérature", "thèse"],
+    "financial": ["revenue", "profit", "loss", "equity", "fiscal", "balance sheet", "cash flow", "valuation", "revenu", "profit", "perte", "capitaux propres", "fiscal", "bilan", "flux de trésorerie", "évaluation"],
+    "technical": ["algorithm", "api", "repository", "deployment", "protocol", "database", "framework", "runtime", "algorithme", "dépôt", "déploiement", "protocole", "base de données", "cadre", "runtime"],
+    "narrative": ["chapter", "character", "plot", "scene", "dialogue", "protagonist", "story", "novel", "chapitre", "personnage", "intrigue", "scène", "dialogue", "protagoniste", "histoire", "roman"],
+    "scientific": ["experiment", "variable", "control group", "statistical", "finding", "evidence", "sample", "observation", "expérience", "variable", "groupe de contrôle", "statistique", "résultat", "preuve", "échantillon", "observation"],
+    "regulatory": ["compliance", "regulation", "audit", "governance", "policy", "risk", "control", "obligation", "conformité", "réglementation", "audit", "gouvernance", "politique", "risque", "contrôle", "obligation"],
+    "marketing": ["campaign", "conversion", "audience", "brand", "segmentation", "retention", "funnel", "roi", "campagne", "conversion", "audience", "marque", "segmentation", "rétention", "entonnoir", "roi"],
+    "education": ["curriculum", "assessment", "learning", "student", "teacher", "pedagogy", "course", "instruction", "curriculum", "évaluation", "apprentissage", "étudiant", "enseignant", "pédagogie", "cours", "instruction"],
+    "cybersecurity": ["vulnerability", "threat", "malware", "encryption", "incident", "firewall", "authentication", "exploit", "vulnérabilité", "menace", "malware", "chiffrement", "incident", "pare-feu", "authentification", "exploit"],
+    "product": ["roadmap", "feature", "release", "user story", "backlog", "ux", "adoption", "prioritization", "feuille de route", "fonctionnalité", "version", "histoire utilisateur", "backlog", "ux", "adoption", "priorisation"],
+    "operations": ["workflow", "throughput", "sla", "capacity", "scheduling", "logistics", "inventory", "downtime", "flux de travail", "débit", "sla", "capacité", "planification", "logistique", "inventaire", "temps d'arrêt"],
+    "policy": ["guideline", "directive", "standards", "framework", "mandate", "protocol", "code of conduct", "principle", "ligne directrice", "directive", "normes", "cadre", "mandat", "protocole", "code de conduite", "principe"],
+    "research": ["benchmark", "model", "inference", "evaluation", "baseline", "ablation", "metric", "corpus", "benchmark", "modèle", "inférence", "évaluation", "baseline", "ablation", "métrique", "corpus"],
 }
 
 

@@ -5,23 +5,30 @@ All heavy work is executed in a background thread so the HTTP server
 stays responsive; progress is polled via GET /status/{job_id}.
 """
 
+# Import standard libraries for file I/O, JSON manipulation, regular expressions, threading, logging, etc.
 import io
 import csv
 import json
 import re
-import uuid
-import threading
-import traceback
-import logging
-import os
-import time
-from typing import Any, Dict, List
+import uuid  # For generating unique job IDs
+import threading  # For running pipeline in background threads
+import traceback  # For detailed error reporting
+import logging  # For logging events and debugging
+import os  # For OS operations like file path handling
+import time  # For timing operations
+import chardet
 
+from typing import Any, Dict, List  # Type hints for function parameters and return values
+
+# FastAPI framework and utilities for HTTP server
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware  # Enable cross-origin requests
+from fastapi.responses import JSONResponse, Response  # Response types
 
-MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
+# Constants
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # Maximum file size limit: 50 MB
+
+# Configure application logger with JSON format for structured logging
 logger = logging.getLogger("autochunker")
 if not logger.handlers:
     logging.basicConfig(
@@ -29,7 +36,8 @@ if not logger.handlers:
         format='{"ts":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","msg":"%(message)s"}',
     )
 
-# ── Pipeline stages ───────────────────────────────────────────────────────
+# ── Import Pipeline Stages ───────────────────────────────────────────────────────
+# S1: Profile document to understand its structure, domain, and quality metrics
 from pipeline.s1_profiler import profile_document
 from pipeline.s2_chunkers import run_all_chunkers, select_best_strategy
 from pipeline.s3_entropy import refine_boundaries, get_jsd_series
@@ -119,47 +127,196 @@ def _parse_file(filename: str, content: bytes) -> str:
 
 
 def _parse_pdf(content: bytes) -> str:
-    # PyPDF2 is much faster for upload/pipeline startup. pdfplumber is kept as
-    # a fallback for PDFs where the fast extractor finds little/no text.
+    """
+    Extract plain text from PDF bytes.
+
+    Strategy (in order of reliability):
+      1. PyMuPDF (fitz)   — best encoding support, handles custom ToUnicode maps
+      2. pdfplumber        — good layout preservation
+      3. pdfminer.six      — robust for malformed PDFs
+      4. PyPDF2            — fast fallback
+      5. Raw decode        — last resort
+
+    PyMuPDF is first because it correctly applies PDF ToUnicode CMap tables,
+    which fixes the garbled character encoding seen with custom-font PDFs.
+    """
+
     pages: List[str] = []
+
+    # ── Method 1: PyMuPDF / fitz (preferred — best encoding support) ─────
     try:
-        import PyPDF2  # noqa: E402
-        reader = PyPDF2.PdfReader(io.BytesIO(content))
-        pages = [
-            reader.pages[i].extract_text() or ""
-            for i in range(len(reader.pages))
-        ]
+        import fitz  # PyMuPDF
+        doc = fitz.open(stream=io.BytesIO(content), filetype="pdf")
+        for page in doc:
+            text = page.get_text(
+                "text",
+                flags=fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_MEDIABOX_CLIP,
+            )
+            if text:
+                pages.append(text)
+        doc.close()
     except Exception:
         pass
 
+    # ── Method 2: pdfplumber ─────────────────────────────────────────────
     if sum(len(p.strip()) for p in pages) < 200:
+        pages = []
         try:
-            import pdfplumber  # noqa: E402
-            plumber_pages: List[str] = []
+            import pdfplumber
             with pdfplumber.open(io.BytesIO(content)) as pdf:
                 for page in pdf.pages:
-                    text = page.extract_text()
-                    if text:
-                        plumber_pages.append(text)
-            if sum(len(p.strip()) for p in plumber_pages) > sum(len(p.strip()) for p in pages):
-                pages = plumber_pages
+                    extracted = page.extract_text(x_tolerance=2, y_tolerance=2)
+                    if extracted:
+                        pages.append(extracted)
         except Exception:
             pass
 
-    if not pages:
-        return _sanitize_text(content.decode("utf-8", errors="replace"))
+    # ── Method 3: pdfminer.six ───────────────────────────────────────────
+    if sum(len(p.strip()) for p in pages) < 200:
+        try:
+            from pdfminer.high_level import extract_text
+            text = extract_text(io.BytesIO(content))
+            if text and len(text.strip()) > 50:
+                pages = [text]
+        except Exception:
+            pass
 
-    # ── Clean each page before joining ────────────────────────────────────
+    # ── Method 4: PyPDF2 fallback ─────────────────────────────────────────
+    if sum(len(p.strip()) for p in pages) < 200:
+        try:
+            import PyPDF2
+            reader = PyPDF2.PdfReader(io.BytesIO(content))
+            pages = [
+                reader.pages[i].extract_text() or ""
+                for i in range(len(reader.pages))
+            ]
+        except Exception:
+            pass
+
+    # ── Method 5: raw decode fallback ────────────────────────────────────
+    if not pages or sum(len(p.strip()) for p in pages) < 50:
+        detected = chardet.detect(content[:10_000])
+        enc = detected.get("encoding") or "latin-1"
+        try:
+            return _sanitize_text(content.decode(enc, errors="replace"))
+        except Exception:
+            return _sanitize_text(content.decode("utf-8", errors="replace"))
+
+    # ── Clean each page ───────────────────────────────────────────────────
     cleaned = [_clean_pdf_page(p) for p in pages if p.strip()]
 
-    # Detect & strip repeated header/footer lines that appear on most pages.
-    # A line that appears verbatim (after stripping) in ≥ 60 % of pages and
-    # is ≤ 12 words is almost certainly a running header or footer.
+    # ── Strip repeated header/footer lines ───────────────────────────────
     if len(cleaned) >= 3:
         cleaned = _strip_repeated_lines(cleaned)
 
-    return _sanitize_text("\n\n".join(cleaned))
+    # ── Join pages and fix encoding artifacts ─────────────────────────────
+    raw_text = "\n\n".join(cleaned)
+    fixed_text = _fix_pdf_encoding(raw_text)
+    return _sanitize_text(fixed_text)
 
+def _fix_pdf_encoding(text: str) -> str:
+    """
+    Correct encoding mojibake in PDF text extraction.
+    
+    PDFs with complex encodings often get misinterpreted by text extractors.
+    This function tries multiple encoding pairs to detect and fix the issue.
+    """
+ 
+    if not text:
+        return text
+ 
+    # ── Fix PDF CID character references ────────────────────────────────
+    text = re.sub(r"\s*\(cid:\s*\d+\s*\)\s*", " ", text)
+    text = re.sub(r" +", " ", text)
+ 
+    # ── Try multiple encoding pairs and pick the best result ────────────
+    # This is the key: try different re-encoding combinations
+    encoding_pairs = [
+        ("latin-1", "windows-1252"),
+        ("iso-8859-1", "cp1252"),
+        ("utf-8", "latin-1"),
+        ("cp1252", "latin-1"),
+        ("iso-8859-5", "utf-8"),
+    ]
+    
+    best_text = text
+    best_score = _score_text_quality(text)
+    
+    for source_enc, target_enc in encoding_pairs:
+        try:
+            # Try to re-interpret the text with different encoding
+            fixed = text.encode(source_enc, errors="ignore").decode(target_enc, errors="ignore")
+            score = _score_text_quality(fixed)
+            
+            # Keep the version with the highest quality score
+            if score > best_score and fixed.strip():
+                best_text = fixed
+                best_score = score
+        except Exception:
+            continue
+    
+    text = best_text
+ 
+    # ── Fix common PDF ligature and typographic artifacts ─────────────────
+    replacements = {
+        "\ufb01": "fi",    # ﬁ  fi-ligature
+        "\ufb02": "fl",    # ﬂ  fl-ligature
+        "\ufb03": "ffi",   # ﬃ  ffi-ligature
+        "\ufb04": "ffl",   # ﬄ  ffl-ligature
+        "\u2019": "'",     # '  right single quotation mark
+        "\u2018": "'",     # '  left single quotation mark
+        "\u201c": '"',     # "  left double quotation mark
+        "\u201d": '"',     # "  right double quotation mark
+        "\u2013": "-",     # –  en dash
+        "\u2014": "--",    # —  em dash
+        "\u00a0": " ",     # non-breaking space
+        "\u00ad": "",      # soft hyphen
+        "\u000c": "\n",    # form feed
+    }
+    for bad_char, replacement in replacements.items():
+        text = text.replace(bad_char, replacement)
+ 
+    return text
+
+
+def _score_text_quality(text: str) -> float:
+    """
+    Score text quality based on readable characters and patterns.
+    Higher score = better quality (fewer mojibake artifacts).
+    
+    Heuristic: count ratio of readable characters vs. control/unusual chars.
+    """
+    if not text:
+        return 0.0
+    
+    # French accented characters (common in documents)
+    accented = "éèêëàâùûôîïçœæÉÈÊËÀÂÙÛÔÎÏÇŒÆüÜöÖäÄ"
+    
+    # Count various character types
+    ascii_letters = sum(1 for c in text if c.isalpha() and ord(c) < 128)
+    accented_count = sum(1 for c in text if c in accented)
+    digits = sum(1 for c in text if c.isdigit())
+    spaces = sum(1 for c in text if c.isspace())
+    
+    # Count suspicious characters (mojibake indicators)
+    # These are rarely in clean text but common in encoding errors
+    suspicious = sum(1 for c in text if ord(c) in range(0x80, 0xA0) or (ord(c) > 127 and c not in accented))
+    
+    # Calculate quality score
+    total_chars = len(text)
+    readable_chars = ascii_letters + accented_count + digits + spaces
+    
+    # Base score: ratio of readable to total characters
+    base_score = readable_chars / total_chars if total_chars > 0 else 0.0
+    
+    # Penalty for suspicious characters
+    suspicious_penalty = (suspicious / total_chars) * 0.5 if total_chars > 0 else 0.0
+    
+    # Bonus for accented characters (indicator of proper encoding for French/European text)
+    accented_bonus = (accented_count / total_chars) * 0.3 if total_chars > 0 else 0.0
+    
+    score = base_score - suspicious_penalty + accented_bonus
+    return max(0.0, score)
 
 def _sanitize_text(text: str) -> str:
     clean = text.replace("\x00", " ")
@@ -234,7 +391,7 @@ def _validate_user_config(user_config: Dict[str, Any]) -> Dict[str, Any]:
     if cfg.get("tau_jsd_low", DEFAULT_CONFIG["tau_jsd_low"]) >= cfg.get("tau_jsd_high", DEFAULT_CONFIG["tau_jsd_high"]):
         cfg["tau_jsd_high"] = float(cfg.get("tau_jsd_low", 0.15)) + 0.1
     metric = str(cfg.get("entropy_metric", DEFAULT_CONFIG["entropy_metric"])).lower()
-    cfg["entropy_metric"] = metric if metric in {"jsd", "hellinger", "hybrid"} else DEFAULT_CONFIG["entropy_metric"]
+    cfg["entropy_metric"] = metric if metric in {"jsd", "hellinger", "hybrid", "pmi", "depth", "drift"} else DEFAULT_CONFIG["entropy_metric"]
     # Validate chunking strategy
     strategy = str(cfg.get("chunking_strategy", "auto")).lower()
     cfg["chunking_strategy"] = strategy if strategy in VALID_STRATEGIES else "auto"

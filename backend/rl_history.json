@@ -158,5 +158,187 @@
     "tau_sem": 0.75,
     "hybrid_lambda": 0.575,
     "merge_weight": 0.12
+  },
+  "general::recursive": {
+    "last_reward_components": {
+      "quality": 0.8863,
+      "coverage": 1.0,
+      "consistency": 0.9751,
+      "efficiency": 0.6667,
+      "total": 0.9052
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::recursive": {
+    "last_reward_components": {
+      "quality": 0.6054,
+      "coverage": 1.0,
+      "consistency": 0.7302,
+      "efficiency": 0.4281,
+      "total": 0.7222
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.4,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "general::sliding_window": {
+    "last_reward_components": {
+      "quality": 0.8924,
+      "coverage": 1.0,
+      "consistency": 0.9003,
+      "efficiency": 0.6667,
+      "total": 0.8924
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "general::structure": {
+    "last_reward_components": {
+      "quality": 0.9002,
+      "coverage": 1.0,
+      "consistency": 0.9114,
+      "efficiency": 0.6667,
+      "total": 0.8974
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::sliding_window": {
+    "last_reward_components": {
+      "quality": 0.5792,
+      "coverage": 1.0,
+      "consistency": 0.8474,
+      "efficiency": 0.3892,
+      "total": 0.7306
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.41500000000000004,
+    "n_max": 900,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::structure": {
+    "last_reward_components": {
+      "quality": 0.5533,
+      "coverage": 1.0,
+      "consistency": 0.7547,
+      "efficiency": 0.467,
+      "total": 0.7146
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.41500000000000004,
+    "n_max": 900,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "general::semantic_boundaries": {
+    "last_reward_components": {
+      "quality": 0.7791,
+      "coverage": 1.0,
+      "consistency": 0.4599,
+      "efficiency": 0.0,
+      "total": 0.6647
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "general::sentence_clustering": {
+    "last_reward_components": {
+      "quality": 0.7652,
+      "coverage": 1.0,
+      "consistency": 0.5204,
+      "efficiency": 0.0,
+      "total": 0.6719
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::semantic_boundaries": {
+    "last_reward_components": {
+      "quality": 0.7248,
+      "coverage": 1.0,
+      "consistency": 0.3131,
+      "efficiency": 0.0,
+      "total": 0.6163
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.4,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "general::paragraph_pack": {
+    "last_reward_components": {
+      "quality": 0.8931,
+      "coverage": 1.0,
+      "consistency": 0.928,
+      "efficiency": 0.6667,
+      "total": 0.8982
+    },
+    "tau_jsd_low": 0.15,
+    "tau_jsd_high": 0.45,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::sentence_clustering": {
+    "last_reward_components": {
+      "quality": 0.7211,
+      "coverage": 1.0,
+      "consistency": 0.4774,
+      "efficiency": 0.0,
+      "total": 0.6479
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.4,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::paragraph_pack": {
+    "last_reward_components": {
+      "quality": 0.6055,
+      "coverage": 1.0,
+      "consistency": 0.7302,
+      "efficiency": 0.4281,
+      "total": 0.7222
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.4,
+    "n_max": 1000,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
+  },
+  "regulatory::legal_articles": {
+    "last_reward_components": {
+      "quality": 0.5533,
+      "coverage": 1.0,
+      "consistency": 0.7547,
+      "efficiency": 0.467,
+      "total": 0.7146
+    },
+    "tau_jsd_low": 0.2,
+    "tau_jsd_high": 0.41500000000000004,
+    "n_max": 900,
+    "tau_sem": 0.75,
+    "hybrid_lambda": 0.6
   }
 }
