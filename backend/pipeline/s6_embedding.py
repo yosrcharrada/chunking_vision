@@ -24,6 +24,12 @@ DEFAULT_ENSEMBLE = [
     "jina-embeddings-v2-base-en",
 ]
 
+# Lightweight ensemble for fast RL iterations (speeds up S7 calibration)
+FAST_ENSEMBLE = [
+    "all-MiniLM-L6-v2",            # Fast, proven quality
+    "all-mpnet-base-v2",           # Good balance
+]
+
 DOMAIN_TEMPLATES = {
     "legal": "Legal context: section intent, obligations, governing terms, and enforceable clauses.",
     "medical": "Medical context: patient condition, clinical findings, interventions, and outcomes.",
@@ -47,6 +53,20 @@ def _get_model(model_name: str):
         return None
 
 
+def preload_models(model_list: Optional[List[str]] = None) -> None:
+    """
+    Pre-load models into cache to avoid blocking during pipeline execution.
+    Call this once at startup for models you'll use.
+    
+    Args:
+        model_list: List of model names to preload. If None, preloads FAST_ENSEMBLE.
+    """
+    if model_list is None:
+        model_list = FAST_ENSEMBLE
+    for model_name in model_list:
+        _get_model(model_name)
+
+
 def embed_chunks(
     chunks: List[Dict],
     full_text: str,
@@ -60,7 +80,17 @@ def embed_chunks(
     domain = doc_profile.get("domain", "general")
     doc_type = doc_profile.get("type", "prose")
     length_bucket = doc_profile.get("length_bucket", "medium")
-    ensemble_models = config.get("ensemble_models", DEFAULT_ENSEMBLE)
+    
+    # Determine which ensemble to use
+    # If in RL mode or if fast mode is requested, use lightweight ensemble
+    in_rl_mode = config.get("_in_rl_calibration", False)
+    use_fast = config.get("use_fast_ensemble", in_rl_mode)
+    
+    ensemble_models = config.get("ensemble_models", None)
+    if not ensemble_models:
+        # Auto-select ensemble based on mode
+        ensemble_models = FAST_ENSEMBLE if use_fast else DEFAULT_ENSEMBLE
+    
     if not isinstance(ensemble_models, list) or not ensemble_models:
         ensemble_models = [model_name]
 
@@ -144,10 +174,28 @@ def _encode_with_model(texts: List[str], model_name: str) -> Optional[List[List[
     if cached is not None:
         return cached
     try:
-        vectors = model.encode(texts, show_progress_bar=False, batch_size=16)
-        output = [v.tolist() for v in vectors]
-        _cache_set(cache_key, output)
-        return output
+        import signal
+        
+        # Set a timeout of 120 seconds per model encoding (prevents hanging)
+        def timeout_handler(signum, frame):
+            raise TimeoutError(f"Model encoding timeout for {model_name}")
+        
+        # Only set signal on Unix systems (Windows doesn't support SIGALRM)
+        import platform
+        if platform.system() != "Windows":
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(120)  # 120 second timeout
+        
+        try:
+            vectors = model.encode(texts, show_progress_bar=False, batch_size=16)
+            output = [v.tolist() for v in vectors]
+            _cache_set(cache_key, output)
+            return output
+        finally:
+            # Cancel the alarm
+            if platform.system() != "Windows":
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
     except Exception:
         return None
 

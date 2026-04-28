@@ -258,6 +258,13 @@ def run_rl_loop(
     warm_cfg      = _warm_start_config(config, history, history_key)
     probe_queries = _generate_probes(text, n=6)
 
+    # PRE-LOAD FAST EMBEDDING MODELS at startup (avoid blocking during RL loop)
+    try:
+        from .s6_embedding import preload_models, FAST_ENSEMBLE
+        preload_models(FAST_ENSEMBLE)
+    except Exception:
+        pass  # If preload fails, continue anyway (will load on-demand)
+
     # Initialize DQN agent with 11-dimensional state space
     agent = DQNAgent(
         state_dim  = 11,   # IMPORTANT: must match _state_vec() output length
@@ -350,6 +357,9 @@ def run_rl_loop(
 
         # ── Re-run pipeline S2 → S6 with trial config ───────────────────
         try:
+            # Mark this config as being in RL mode (signals S6 to use fast ensemble)
+            trial_cfg["_in_rl_calibration"] = True
+            
             # S2: generate candidate chunks with all strategies
             all_chunks   = run_all_chunkers(text, doc_type, trial_cfg)
 
@@ -371,7 +381,7 @@ def run_rl_loop(
             # S5: graph enrichment (entity graph + KG store)
             trial_chunks = enrich_graph(trial_chunks, [], trial_cfg)
 
-            # S6: contextual embedding (ensemble models)
+            # S6: contextual embedding (ensemble models) — uses FAST_ENSEMBLE due to _in_rl_calibration flag
             trial_chunks, _ = embed_chunks(
                 trial_chunks, text, doc_profile, model_name, trial_cfg
             )
