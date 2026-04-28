@@ -21,8 +21,8 @@ const DEFAULT_CONFIG = {
   alpha: 0.4,
   beta: 0.4,
   lambda: 0.2,
-  embedding_model: 'all-MiniLM-L6-v2',
-  ensemble_models: ['all-MiniLM-L6-v2', 'all-mpnet-base-v2', 'jina-embeddings-v2-base-en'],
+  embedding_model: 'mxbai-embed-large',  // NEW: Updated to use mxbai-embed-large
+  ensemble_models: ['mxbai-embed-large', 'all-MiniLM-L6-v2', 'all-mpnet-base-v2', 'jina-embeddings-v2-base-en'],
 }
 
 const TABS = [

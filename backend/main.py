@@ -61,13 +61,17 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "alpha": 0.4,
     "beta": 0.4,
     "lambda": 0.2,
-    "embedding_model": "all-MiniLM-L6-v2",
+    "embedding_model": "mxbai-embed-large",  # NEW: Default to mxbai-embed-large
     "entropy_metric": "hybrid",
     "hybrid_lambda": 0.6,
     "threshold_mode": "percentile",
     "tau_percentile_low": 25,
     "tau_percentile_high": 75,
+    # NEW (v4): PPL Validation Settings for coherence-based merge decisions
+    "enable_ppl_validation": True,            # Enable PPL validation for merge decisions
+    "ppl_merge_threshold": 1.1,               # Allow 10% PPL increase when merging
     "ensemble_models": [
+        "mxbai-embed-large",                  # NEW: Primary high-quality model
         "all-MiniLM-L6-v2",
         "all-mpnet-base-v2",
         "jina-embeddings-v2-base-en",

@@ -3,6 +3,7 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell, Legend,
 } from 'recharts'
 import EvaluationTable from './EvaluationTable'
+import ScoringFormulas from './ScoringFormulas'
 import { useEffect, useRef, useState } from 'react'
 
 /* ── Mini force-directed SVG entity graph ────────────────────────────── */
@@ -289,6 +290,11 @@ export default function InspectorTab({ results, config }) {
 
   return (
     <div>
+      {/* Scoring formulas reference */}
+      <div style={{ marginBottom: 20 }}>
+        <ScoringFormulas />
+      </div>
+
       {/* Stage overview */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-title">Pipeline Stage Overview</div>

@@ -18,6 +18,7 @@ _cache_dir = os.path.join(os.path.dirname(__file__), "..", ".cache", "embeddings
 os.makedirs(_cache_dir, exist_ok=True)
 
 DEFAULT_ENSEMBLE = [
+    "mxbai-embed-large",           # NEW: High-quality primary model
     "all-MiniLM-L6-v2",
     "all-mpnet-base-v2",
     "jina-embeddings-v2-base-en",

@@ -299,6 +299,8 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
               value={config.embedding_model}
               onChange={e => set('embedding_model', e.target.value)}
             >
+              {/* mxbai-embed-large: NEW! High-quality, large-capacity model (1024-dim, best accuracy) */}
+              <option value="mxbai-embed-large">mxbai-embed-large (default)</option>
               {/* all-MiniLM-L6-v2: fast, 384-dim, good for most docs */}
               <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
               {/* all-mpnet-base-v2: slower, higher quality, 768-dim */}
