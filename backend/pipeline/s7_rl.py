@@ -407,17 +407,28 @@ def run_rl_loop(
         # Update network weights from replay buffer
         agent.learn()
 
-        # ── Keep best configuration ──────────────────────────────────────
+        # ── Keep best configuration & handle degradation ──────────────────────────────────────
         if reward > best_reward:
+            # ✓ Improvement: keep this config going forward
             best_reward      = reward
             best_chunks      = trial_chunks
             best_components  = trial_components
             current_cfg      = trial_cfg      # move to better config
             current_chunks   = trial_chunks
             current_components = trial_components
+        else:
+            # ✗ Degradation: strongly penalize this action + revert to best state
+            # Negative reward signals the agent: "this action was bad"
+            penalized_reward = reward - (best_reward - reward) * 0.5  # double the penalty
+            agent.remember((state_vec, action, penalized_reward, next_state))
+            agent.learn()
+            # Revert to best state for next iteration (don't compound the error)
+            current_chunks = best_chunks
+            current_components = best_components
+            reward = best_reward  # Use best reward for history tracking
 
         reward_history.append(round(reward, 4))
-        reward_breakdown.append(trial_components)
+        reward_breakdown.append(best_components if reward == best_reward else trial_components)
 
     # ── Build final config with diagnostic metadata ──────────────────────
     final_cfg = copy.deepcopy(current_cfg)
