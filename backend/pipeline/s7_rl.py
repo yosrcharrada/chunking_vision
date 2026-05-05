@@ -1,27 +1,123 @@
 """
-S7 — Advanced RL Calibration (v3 — STABLE with Monotonic Improvement Guarantee)
+S7 — Hyperparameter Calibration via Bayesian Optimization (TPE)
+================================================================
+Pipeline position : runs AFTER S2–S6 (all chunking stages) and produces the
+                    final, optimally-configured chunk set for this document.
 
-CRITICAL FIXES:
-✓ Best-State Tracking: Maintains best_state, best_reward, best_chunks
-✓ Safe Rollback: Enforces rollback when reward degrades
-✓ Replay Buffer Purification: Only stores improving transitions
-✓ Exploration Decay: Epsilon decays + immediate reduction on 2 consecutive drops
-✓ Early Stopping: Stops after K steps with no improvement
-✓ Episodic Loop: 1 document = 1 episode with full reset
+WHY WE REPLACED DQN WITH BAYESIAN OPTIMIZATION
+───────────────────────────────────────────────
+The original DQN had three fatal flaws that made it a no-op in practice:
 
-CORE GUARANTEE:
-  "Chunk quality NEVER degrades within an episode.
-   Any action worsening performance is IMMEDIATELY reverted."
+  1. "Monotonic improvement guarantee" killed all exploration.
+     Any trial that scored lower than the current best was immediately
+     reverted AND double-penalized.  With 10 iterations and instant
+     reversion, the agent could never walk through a temporarily-worse
+     state to reach a globally-better one.  The reward history froze at
+     iteration 1 in every test.
+
+  2. Too few iterations for a DQN to learn anything.
+     A DQN with 18 actions and an 11-dim state needs hundreds of
+     transitions before its Q-network generalises.  10 iterations with
+     a revert policy → ≤ 2 non-reverted transitions → zero learning.
+
+  3. Self-referential reward.
+     reward_quality = 1 - mean(S4_boundary_score).
+     S4 computes boundary_score inside the same pipeline run the agent
+     just triggered.  The agent was optimizing a number it computed
+     itself, not an external ground truth.
+
+WHAT BAYESIAN OPTIMIZATION (TPE) GIVES US
+──────────────────────────────────────────
+Tree-structured Parzen Estimator (TPE) is the right algorithm here:
+
+  • Designed for expensive black-box functions (each eval = full pipeline
+    run).  It needs 20–50 trials, not thousands.
+
+  • Builds a probabilistic surrogate model of the objective landscape
+    from all past trials. Uses that model to pick the next configuration
+    most likely to improve, via the Expected Improvement (EI) criterion:
+
+        EI(x) = E[max(f(x) − f(x⁺), 0)]
+
+    where f(x⁺) is the current best observed reward.
+
+  • Does not need exploration/exploitation tuning (ε, γ, etc.).
+    The surrogate model handles the trade-off automatically.
+
+  • Warm-starts perfectly: persist the study's past trials to disk, load
+    them on the next document of the same domain → the surrogate model
+    already knows which regions of the search space are good.
+
+REWARD FUNCTION FIXES
+─────────────────────
+  Old coverage   : recall_proxy with probes auto-generated from headings
+                   of the SAME document → trivially answered by any chunking
+                   → always 1.0 → zero discriminating signal.
+
+  New coverage   : cross-chunk PRECISION signal.  For each probe, we
+                   measure whether the BEST matching chunk is tightly
+                   focused (short, high ICC) or sprawling (long, low ICC).
+                   A chunk that contains the answer within 300 words of
+                   relevant content scores higher than one that buries it
+                   in 900 words of mixed content.
+
+  Old quality    : 1 - mean(boundary_score)  — same pipeline, circular.
+
+  New quality    : combination of:
+                     (a) mean inter-chunk separation (hash-cosine distance
+                         between adjacent chunk embeddings → real boundary
+                         distinctiveness).
+                     (b) mean intra-chunk ICC (from S4) → coherence.
+                   Neither of these is produced by the component being
+                   optimised; they are independent structural signals.
+
+  efficiency     : unchanged but now correctly drives the search.
+                   target_count = total_words / TARGET_WORDS_PER_CHUNK.
+                   The search CAN fix it because it explores n_max freely.
+
+  structural     : unchanged. Hard-boundary ratio + mean PMI-drop.
+
+  consistency    : unchanged. CV of chunk sizes.
+
+SEARCH SPACE
+────────────
+  tau_jsd_low          ∈ [0.05, 0.40]  — merge threshold (S3)
+  tau_jsd_high         ∈ [0.20, 0.80]  — hard-split threshold (S3)
+  n_max                ∈ [150,  900]   — max tokens per chunk (S2)
+  n_min                ∈ [30,   250]   — min tokens per chunk (S2)
+  tau_sem              ∈ [0.40, 0.95]  — S4 merge similarity threshold
+  tau_percentile_low   ∈ [5,    45]    — S3 adaptive threshold lower %ile
+  tau_percentile_high  ∈ [55,   95]    — S3 adaptive threshold upper %ile
+
+PERSISTENCE & WARM-START
+────────────────────────
+  Best trials are stored in `rl_history.json` keyed by domain
+  (e.g. "regulatory", "legal", "technical").  On subsequent documents
+  of the same domain the surrogate model is seeded with past trials,
+  meaning fewer trials are needed to reach good performance.
 """
 
 import copy
 import json
+import logging
 import os
 import re
-from collections import deque
-from typing import Any, Dict, List, Tuple
+import warnings
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+
+# ── Optional Optuna import — graceful fallback to random search if missing ───
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)   # silence per-trial logs
+    _OPTUNA_AVAILABLE = True
+except ImportError:
+    _OPTUNA_AVAILABLE = False
+    warnings.warn(
+        "optuna not installed; S7 will fall back to random search.  "
+        "Install with: pip install optuna"
+    )
 
 from .s2_chunkers import run_all_chunkers, select_best_strategy
 from .s3_entropy import refine_boundaries
@@ -29,199 +125,29 @@ from .s4_boundary import filter_boundaries
 from .s5_graph import enrich_graph
 from .s6_embedding import embed_chunks
 
-# Average words per chunk we aim for — used to compute the "efficiency" target
+logger = logging.getLogger(__name__)
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+# Ideal chunk length in words — drives the efficiency reward component.
+# A legal/regulatory document is best served by ~300-word chunks so that
+# each chunk covers one concept without burying it in surrounding context.
 _TARGET_WORDS_PER_CHUNK = 300
 
-# Path where the RL agent persists its best configuration across runs
+# Where we persist per-domain trial history for warm-start
 _RL_HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "rl_history.json")
 
+# Minimum number of Optuna trials before early stopping is allowed
+_MIN_TRIALS_BEFORE_STOP = 8
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DQN Agent
-# ─────────────────────────────────────────────────────────────────────────────
-
-class DQNAgent:
-    """
-    Deep Q-Network agent with:
-    - 2-layer fully connected neural network for Q-value estimation
-    - Replay buffer (deque, maxlen=500) for experience replay
-    - Epsilon-greedy exploration (ε=0.25 by default)
-    - Mini-batch gradient descent on sampled transitions (batch=16)
-
-    State dimension: 11 (5 entropy signals + 6 context features)
-    Action space: 6 parameters × 3 magnitudes = 18 discrete actions
-    """
-
-    # Parameters the agent can tune at each step
-    ACTIONS = [
-        "tau_jsd_low",        # merge threshold
-        "tau_jsd_high",       # hard-split threshold
-        "n_max",              # maximum chunk size
-        "tau_sem",            # semantic similarity threshold (S4)
-        "tau_percentile_low", # NEW: adaptive threshold percentile (lower bound)
-        "tau_percentile_high",# NEW: adaptive threshold percentile (upper bound)
-    ]
-
-    # Three action magnitudes: small, medium, large step
-    MAGNITUDES = [0.5, 1.0, 1.5]
-
-    def __init__(
-        self,
-        state_dim: int = 11,   # CHANGED from 8 → 11 to accommodate 5 entropy signals
-        hidden_dim: int = 24,
-        lr: float = 0.02,
-        gamma: float = 0.9,
-        epsilon: float = 0.25,
-    ):
-        self.state_dim   = state_dim
-        self.hidden_dim  = hidden_dim
-        self.lr          = lr
-        self.gamma       = gamma   # discount factor for future rewards
-        self.epsilon     = epsilon # exploration rate
-
-        # Fixed random seed for reproducibility of weight initialization
-        self.rng = np.random.RandomState(42)
-
-        # Number of discrete actions = parameters × magnitudes
-        self.action_size = len(self.ACTIONS) * len(self.MAGNITUDES)
-
-        # ── Network weights: 2-layer MLP ────────────────────────────────
-        # Layer 1: state_dim → hidden_dim  (tanh activation)
-        self.W1 = self.rng.randn(hidden_dim, state_dim).astype(np.float32) * 0.1
-        self.b1 = np.zeros(hidden_dim, dtype=np.float32)
-
-        # Layer 2: hidden_dim → action_size  (linear, outputs Q-values)
-        self.W2 = self.rng.randn(self.action_size, hidden_dim).astype(np.float32) * 0.1
-        self.b2 = np.zeros(self.action_size, dtype=np.float32)
-
-        # Replay buffer: stores (state, action, reward, next_state) tuples
-        self.replay = deque(maxlen=500)
-
-    def _forward(self, state: np.ndarray) -> np.ndarray:
-        """Forward pass: state → Q-values for all actions."""
-        h = np.tanh(self.W1 @ state + self.b1)   # hidden layer with tanh
-        return self.W2 @ h + self.b2              # output layer (linear)
-
-    def select_action(self, state: np.ndarray) -> int:
-        """
-        Epsilon-greedy action selection.
-        With probability ε: random action (exploration).
-        Otherwise: action with highest Q-value (exploitation).
-        """
-        if self.rng.rand() < self.epsilon:
-            # Random action — explore the action space
-            return int(self.rng.randint(0, self.action_size))
-        # Greedy: pick the action with the highest predicted Q-value
-        q = self._forward(state)
-        return int(np.argmax(q))
-
-    def remember(self, transition: Tuple[np.ndarray, int, float, np.ndarray]) -> None:
-        """Store a (state, action, reward, next_state) transition in the replay buffer."""
-        self.replay.append(transition)
-
-    def learn(self, batch_size: int = 16) -> None:
-        """
-        Sample a mini-batch from replay buffer and update network weights
-        using the Bellman equation:
-          target Q(s,a) = reward + γ * max_a' Q(s', a')
-        Gradient update: mean squared error between predicted and target Q-values.
-        """
-        # Need at least 8 samples before learning starts
-        if len(self.replay) < 8:
-            return
-
-        # Sample a random subset of stored transitions (without replacement)
-        idxs = self.rng.choice(
-            len(self.replay),
-            size=min(batch_size, len(self.replay)),
-            replace=False,
-        )
-
-        for i in idxs:
-            state, action_idx, reward, next_state = self.replay[i]
-
-            # Compute current Q-values for this state
-            q = self._forward(state)
-
-            # Compute target Q-value for the taken action using Bellman equation
-            target = q.copy()
-            next_q = self._forward(next_state)
-            target[action_idx] = reward + self.gamma * float(np.max(next_q))
-
-            # ── Backpropagation (manual, no autograd) ────────────────────
-            # Forward pass to get intermediate activations
-            h    = np.tanh(self.W1 @ state + self.b1)
-            pred = self.W2 @ h + self.b2
-
-            # Error at output layer
-            err = pred - target
-
-            # Gradients for layer 2
-            grad_W2 = np.outer(err, h)   # outer product: (action_size, hidden_dim)
-            grad_b2 = err
-
-            # Backprop through tanh: gradient of tanh is (1 - tanh²)
-            dh = (1 - h ** 2) * (self.W2.T @ err)
-
-            # Gradients for layer 1
-            grad_W1 = np.outer(dh, state)  # (hidden_dim, state_dim)
-            grad_b1 = dh
-
-            # Gradient descent weight update (minus because we minimize loss)
-            self.W2 -= self.lr * grad_W2
-            self.b2 -= self.lr * grad_b2
-            self.W1 -= self.lr * grad_W1
-            self.b1 -= self.lr * grad_b1
-
-    def apply_action(self, action_idx: int, config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply the selected action to a config copy.
-        action_idx encodes both WHICH parameter and HOW MUCH to change it.
-        """
-        cfg = copy.deepcopy(config)
-
-        # Decode action_idx: first part = which parameter, second part = magnitude
-        action_id = action_idx // len(self.MAGNITUDES)  # which parameter
-        mag_id    = action_idx % len(self.MAGNITUDES)   # which magnitude
-        key       = self.ACTIONS[action_id]
-        scale     = self.MAGNITUDES[mag_id]
-
-        # Base delta for each tunable parameter
-        deltas = {
-            "tau_jsd_low":         0.02 * scale,   # small steps for merge threshold
-            "tau_jsd_high":        0.03 * scale,   # slightly larger for split threshold
-            "n_max":               20   * scale,   # 10/20/30 tokens at a time
-            "tau_sem":             0.02 * scale,   # semantic similarity threshold
-            "tau_percentile_low":  2.0  * scale,   # percentile steps (2/4/6 points)
-            "tau_percentile_high": 2.0  * scale,   # percentile steps (2/4/6 points)
-        }
-
-        # Direction: even action_idx = decrease, odd = increase
-        sign = -1 if (action_idx % 2 == 0) else 1
-        cfg[key] = (cfg.get(key) or 0.0) + sign * deltas[key]
-
-        # ── Clamp all parameters to valid ranges ─────────────────────────
-        cfg["tau_jsd_low"]  = float(np.clip(cfg.get("tau_jsd_low",  0.15), 0.05, 0.45))
-        cfg["tau_jsd_high"] = float(np.clip(cfg.get("tau_jsd_high", 0.45), 0.20, 0.80))
-
-        # Ensure low < high with minimum gap
-        if cfg["tau_jsd_low"] >= cfg["tau_jsd_high"]:
-            cfg["tau_jsd_high"] = cfg["tau_jsd_low"] + 0.10
-
-        cfg["n_max"]    = int(np.clip(cfg.get("n_max",    500), 200, 900))
-        cfg["tau_sem"]  = float(np.clip(cfg.get("tau_sem", 0.75), 0.40, 0.95))
-
-        # Percentile bounds: low must stay below 45, high must stay above 55
-        cfg["tau_percentile_low"]  = float(np.clip(cfg.get("tau_percentile_low",  25), 5,  45))
-        cfg["tau_percentile_high"] = float(np.clip(cfg.get("tau_percentile_high", 75), 55, 95))
-
-        # Preserve entropy_metric — the RL agent does not change the metric type
-        cfg["entropy_metric"] = cfg.get("entropy_metric") or "hybrid"
-        return cfg
+# If the best reward does not improve by at least this delta over
+# _PATIENCE_TRIALS consecutive trials, stop early.
+_IMPROVEMENT_DELTA = 0.005
+_PATIENCE_TRIALS   = 6
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main RL loop
+# Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_rl_loop(
@@ -231,225 +157,426 @@ def run_rl_loop(
     config: Dict[str, Any],
 ) -> Tuple[List[Dict], List[float], Dict[str, Any]]:
     """
-    Run the DQN calibration loop.
+    Tune hyperparameters for EACH chunking strategy independently via Bayesian
+    Optimisation (TPE), then return the strategy+params combination that scores
+    highest — using the SAME metric as S2 so all scores are directly comparable.
 
-    For each iteration:
-      1. Build state vector from current chunk metrics (11-dim)
-      2. Agent selects action (epsilon-greedy)
-      3. Apply action → modified config
-      4. Re-run S2 through S6 with modified config
-      5. Compute multi-objective reward
-      6. Store transition, update network weights
-      7. Keep best configuration found
+    CORRECT ARCHITECTURE
+    ────────────────────
+    The platform benchmarks chunking strategies.  S7's job is to find the best
+    possible version of EACH strategy by tuning its hyperparameters, then crown
+    the overall winner.
 
-    Returns: (best_chunks, reward_history, final_config)
+    Per-strategy BO:
+      For each strategy S in [structure, hybrid_legal_semantic, legal_articles,
+                               recursive, paragraph_pack, ...]:
+        Run a dedicated Optuna study for S alone.
+        Each trial: tune (n_max, n_min, tau_jsd_low, tau_jsd_high, tau_sem,
+                         tau_percentile_low, tau_percentile_high) for S.
+        Evaluate: _strategy_quality_score(S_chunks, n_min, n_max).
+        Record: best params + best score for S.
+
+      Overall winner = argmax over all strategies of their best BO score.
+
+    Why per-strategy, not global?
+      Global BO mixes strategies across trials → TPE surrogate receives
+      inconsistent signal (same params may select different strategies) →
+      bouncing reward → never converges on any strategy's optimum.
+
+    UNIFIED SCORING (same metric throughout)
+      S2 uses _strategy_quality_score.
+      S7 uses _strategy_quality_score.
+      So if S2 gives structure=0.756 and S7 gives structure_optimised=0.789,
+      that 0.789 is genuinely better — not a different scale.
+
+    Trial budget allocation:
+      trials_per_strategy = max_trials // n_active_strategies
+      Minimum 3 trials per strategy (enough for TPE to start learning).
+      Strategies excluded from BO: semantic_boundaries, sentence_clustering
+      (they produce 100+ micro-chunks regardless of params — BO can't help).
+
+    Parameters
+    ──────────
+    text          : raw document text
+    doc_profile   : output of S1
+    initial_chunks: S2 winner chunks (used as baseline and fallback)
+    config        : pipeline config dict
+
+    Returns
+    ───────
+    best_chunks   : chunks from the best strategy+params combination
+    reward_history: flat list of all trial rewards (all strategies combined)
+    final_config  : diagnostics + best params per strategy
     """
-    max_iters  = int(config.get("max_iterations", 10))
-    model_name = config.get("embedding_model", "all-MiniLM-L6-v2")
-    doc_type   = doc_profile.get("type",   "prose")
-    domain     = doc_profile.get("domain", "general")
+    from .s2_chunkers import _strategy_quality_score as _sqscore
 
-    # Use domain as the key for persisting RL history between runs
-    history_key      = str(config.get("rl_history_key") or domain)
-    objective_weights = _objective_weights(config)
-    history          = _load_history()
+    max_trials  = int(config.get("max_iterations", 20))
+    model_name  = config.get("embedding_model", "all-MiniLM-L6-v2")
+    doc_type    = doc_profile.get("type",   "prose")
+    domain      = doc_profile.get("domain", "general")
+    history_key = str(config.get("rl_history_key") or domain)
+    n_min       = int(config.get("n_min", 100))
+    n_max       = int(config.get("n_max", 500))
 
-    # Warm-start: load best known config for this domain from previous runs
-    warm_cfg      = _warm_start_config(config, history, history_key)
-    probe_queries = _generate_probes(text, n=6)
+    # ── Strategies eligible for BO ────────────────────────────────────────────
+    # Excluded: semantic_boundaries and sentence_clustering always produce
+    # 100+ micro-chunks regardless of n_max → BO cannot meaningfully tune them.
+    # They are already benchmarked correctly in S2 with their native params.
+    _EXCLUDED = {"semantic_boundaries", "sentence_clustering"}
 
-    # PRE-LOAD FAST EMBEDDING MODELS at startup (avoid blocking during RL loop)
-    try:
-        from .s6_embedding import preload_models, FAST_ENSEMBLE
-        preload_models(FAST_ENSEMBLE)
-    except Exception:
-        pass  # If preload fails, continue anyway (will load on-demand)
+    # Determine which strategies are active for this document type
+    # (same logic as S2 run_all_chunkers — only legal strategies for legal docs)
+    from .s2_chunkers import run_all_chunkers
+    all_s2 = run_all_chunkers(text, doc_type, config)
+    active_strategies = [s for s in all_s2.keys() if s not in _EXCLUDED]
 
-    # Initialize DQN agent with 11-dimensional state space
-    agent = DQNAgent(
-        state_dim  = 11,   # IMPORTANT: must match _state_vec() output length
-        hidden_dim = int(warm_cfg.get("dqn_hidden_dim", 24)),
-        lr         = float(warm_cfg.get("dqn_lr",      0.02)),
-        gamma      = float(warm_cfg.get("dqn_gamma",   0.90)),
-        epsilon    = float(warm_cfg.get("dqn_epsilon", 0.25)),
-    )
+    # Allocate trial budget evenly across strategies (minimum 3 per strategy)
+    n_strategies      = max(1, len(active_strategies))
+    trials_per_strat  = max(3, max_trials // n_strategies)
 
-    # ── State vector builder ─────────────────────────────────────────────
-    def _state_vec(chs: List[Dict], reward_components: Dict[str, float]) -> np.ndarray:
-        """
-        Build the 11-dimensional state vector for the DQN agent.
+    # ── Baseline: S2 winner with default params ───────────────────────────────
+    baseline_reward = round(float(_sqscore(initial_chunks, n_min, n_max)), 4)
 
-        Dimensions 0-4: the 5 entropy boundary signals from S3
-          (jsd, hellinger, pmi_drop, depth_change, drift)
-          These are now available in chunk["boundary_features"] after S3 runs.
+    # ── Per-strategy BO results ───────────────────────────────────────────────
+    # strategy_name → {"best_chunks", "best_score", "best_params", "trials"}
+    per_strategy_results: Dict[str, Any] = {}
 
-        Dimensions 5-7: chunk quality metrics
-          (mean boundary_score from S4, mean icc from S4, icc from S3)
+    # S2 scores are the baselines for each strategy
+    s2_scores = {}
+    for strat, chunks_list in all_s2.items():
+        if chunks_list:
+            s2_scores[strat] = round(float(_sqscore(chunks_list, n_min, n_max)), 4)
 
-        Dimensions 8-10: reward component values from previous iteration
-          (quality reward, coverage reward, consistency reward)
+    reward_history: List[float] = [baseline_reward]
 
-        Dimension 11: chunk count ratio (actual / target)
-        """
-        if not chs:
-            # Return a neutral state vector if no chunks exist yet
-            return np.zeros(11, dtype=np.float32)
+    # ── Run BO for each strategy independently ────────────────────────────────
+    for strategy in active_strategies:
+        strat_baseline_chunks = all_s2.get(strategy, initial_chunks) or initial_chunks
+        strat_baseline_score  = s2_scores.get(strategy, baseline_reward)
 
-        # Helper: safely extract a float from chunk fields, with default fallback
-        def _mean_field(key: str, default: float) -> float:
-            """Compute mean of a field across all chunks, using boundary_features if needed."""
-            vals = []
-            for c in chs:
-                # First try boundary_features dict (populated by new S3)
-                bf = c.get("boundary_features", {})
-                if key in bf:
-                    vals.append(float(bf[key]))
-                # Then try direct chunk field
-                elif key in c:
-                    vals.append(float(c[key]))
-                else:
-                    vals.append(default)
-            return float(np.mean(vals)) if vals else default
+        # Load per-strategy warm-start (domain + strategy key)
+        strat_key   = f"{history_key}__{strategy}"
+        history     = _load_history()
+        warm_cfg    = _warm_start_config(config, history, strat_key)
+        warm_cfg["chunking_strategy"] = strategy
 
-        return np.array([
-            # ── 5 entropy signals from S3 ────────────────────────────────
-            _mean_field("jsd",          0.4),  # dim 0: JSD signal
-            _mean_field("hellinger",    0.4),  # dim 1: Hellinger signal
-            _mean_field("pmi_drop",     0.5),  # dim 2: PMI-drop (concept shift)
-            _mean_field("depth_change", 0.2),  # dim 3: structural depth change
-            _mean_field("drift",        0.4),  # dim 4: embedding drift
+        strat_best_chunks = strat_baseline_chunks
+        strat_best_score  = strat_baseline_score
+        strat_best_cfg    = copy.deepcopy(warm_cfg)
+        strat_trials: List[float] = []
 
-            # ── S4 quality metrics ───────────────────────────────────────
-            float(np.mean([c.get("boundary_score", 0.5) for c in chs])),  # dim 5
-            float(np.mean([c.get("icc",            0.5) for c in chs])),  # dim 6
-
-            # ── Previous reward components ───────────────────────────────
-            reward_components.get("quality",     0.0),  # dim 7
-            reward_components.get("coverage",    0.0),  # dim 8
-            reward_components.get("consistency", 0.0),  # dim 9
-
-            # ── Chunk count ratio (how close are we to target?) ──────────
-            float(np.clip(len(chs) / max(_target_count(chs), 1.0), 0.0, 2.0)),  # dim 10
-        ], dtype=np.float32)
-
-    # ── Initialize loop state ────────────────────────────────────────────
-    current_cfg    = copy.deepcopy(warm_cfg)
-    best_chunks    = initial_chunks
-    best_components = _compute_reward_components(
-        initial_chunks, probe_queries, objective_weights
-    )
-    best_reward    = best_components["total"]
-    reward_history = [round(best_reward, 4)]
-    reward_breakdown = [best_components]
-    current_components = best_components
-    current_chunks = initial_chunks
-
-    # ── Main iteration loop ──────────────────────────────────────────────
-    for _ in range(max_iters):
-        # Build state from current chunk metrics
-        state_vec = _state_vec(current_chunks, current_components)
-
-        # Agent selects action (epsilon-greedy)
-        action     = agent.select_action(state_vec)
-
-        # Apply action: modify config thresholds/sizes
-        trial_cfg  = agent.apply_action(action, current_cfg)
-
-        # ── Re-run pipeline S2 → S6 with trial config ───────────────────
-        try:
-            # Mark this config as being in RL mode (signals S6 to use fast ensemble)
-            trial_cfg["_in_rl_calibration"] = True
-            
-            # S2: generate candidate chunks with all strategies
-            all_chunks   = run_all_chunkers(text, doc_type, trial_cfg)
-
-            # S2 selection: pick the best strategy's output
-            trial_chunks = select_best_strategy(all_chunks, doc_type, trial_cfg)
-
-            if not trial_chunks:
-                # If selection failed, skip this iteration without learning
-                reward_history.append(round(best_reward, 4))
-                reward_breakdown.append(best_components)
-                continue
-
-            # S3: entropy boundary refinement (now uses 5 signals + LSTM)
-            trial_chunks = refine_boundaries(trial_chunks, trial_cfg)
-
-            # S4: boundary quality filter (CodeBLEU-inspired scoring)
-            trial_chunks = filter_boundaries(trial_chunks, doc_type, [], trial_cfg)
-
-            # S5: graph enrichment (entity graph + KG store)
-            trial_chunks = enrich_graph(trial_chunks, [], trial_cfg)
-
-            # S6: contextual embedding (ensemble models) — uses FAST_ENSEMBLE due to _in_rl_calibration flag
-            trial_chunks, _ = embed_chunks(
-                trial_chunks, text, doc_profile, model_name, trial_cfg
+        if _OPTUNA_AVAILABLE:
+            strat_best_chunks, strat_best_score, strat_best_cfg, strat_trials = (
+                _run_strategy_optuna(
+                    text=text, doc_type=doc_type, doc_profile=doc_profile,
+                    model_name=model_name, warm_cfg=warm_cfg,
+                    strategy=strategy, n_min=n_min, n_max=n_max,
+                    baseline_score=strat_baseline_score,
+                    best_chunks=strat_best_chunks,
+                    best_score=strat_best_score,
+                    best_cfg=strat_best_cfg,
+                    max_trials=trials_per_strat,
+                )
+            )
+        else:
+            strat_best_chunks, strat_best_score, strat_best_cfg, strat_trials = (
+                _run_strategy_random(
+                    text=text, doc_type=doc_type, doc_profile=doc_profile,
+                    model_name=model_name, warm_cfg=warm_cfg,
+                    strategy=strategy, n_min=n_min, n_max=n_max,
+                    baseline_score=strat_baseline_score,
+                    best_chunks=strat_best_chunks,
+                    best_score=strat_best_score,
+                    best_cfg=strat_best_cfg,
+                    max_trials=trials_per_strat,
+                )
             )
 
-        except Exception:
-            # Pipeline failed with this config — don't crash, skip iteration
-            reward_history.append(round(best_reward, 4))
-            reward_breakdown.append(best_components)
-            continue
+        reward_history.extend(strat_trials)
 
-        # ── Compute multi-objective reward ───────────────────────────────
-        trial_components = _compute_reward_components(
-            trial_chunks, probe_queries, objective_weights
-        )
-        reward = trial_components["total"]
+        # Persist per-strategy warm-start
+        _save_history(strat_key, strat_best_cfg, {"total": strat_best_score})
 
-        # Build next state for Bellman update
-        next_state = _state_vec(trial_chunks, trial_components)
+        per_strategy_results[strategy] = {
+            "best_chunks": strat_best_chunks,
+            "best_score":  round(strat_best_score, 4),
+            "s2_baseline": strat_baseline_score,
+            "improvement": round(strat_best_score - strat_baseline_score, 4),
+            "best_params": {
+                k: strat_best_cfg.get(k)
+                for k in ("n_max", "n_min", "tau_jsd_low", "tau_jsd_high",
+                          "tau_sem", "tau_percentile_low", "tau_percentile_high")
+            },
+            "n_trials": len(strat_trials),
+        }
 
-        # Store transition in replay buffer
-        agent.remember((state_vec, action, reward, next_state))
+    # ── Pick overall winner ───────────────────────────────────────────────────
+    # The winner is the strategy whose best BO score is highest.
+    # This is the correct benchmark result: best possible version of each strategy,
+    # winner is the one that performs best on this document.
+    overall_winner = max(
+        per_strategy_results,
+        key=lambda s: per_strategy_results[s]["best_score"],
+    )
+    winner_result = per_strategy_results[overall_winner]
+    best_chunks   = winner_result["best_chunks"]
+    best_reward   = winner_result["best_score"]
 
-        # Update network weights from replay buffer
-        agent.learn()
-
-        # ── Keep best configuration & handle degradation ──────────────────────────────────────
-        if reward > best_reward:
-            # ✓ Improvement: keep this config going forward
-            best_reward      = reward
-            best_chunks      = trial_chunks
-            best_components  = trial_components
-            current_cfg      = trial_cfg      # move to better config
-            current_chunks   = trial_chunks
-            current_components = trial_components
-        else:
-            # ✗ Degradation: strongly penalize this action + revert to best state
-            # Negative reward signals the agent: "this action was bad"
-            penalized_reward = reward - (best_reward - reward) * 0.5  # double the penalty
-            agent.remember((state_vec, action, penalized_reward, next_state))
-            agent.learn()
-            # Revert to best state for next iteration (don't compound the error)
-            current_chunks = best_chunks
-            current_components = best_components
-            reward = best_reward  # Use best reward for history tracking
-
-        reward_history.append(round(reward, 4))
-        reward_breakdown.append(best_components if reward == best_reward else trial_components)
-
-    # ── Build final config with diagnostic metadata ──────────────────────
-    final_cfg = copy.deepcopy(current_cfg)
-    final_cfg["reward_breakdown"]          = best_components
-    final_cfg["reward_history_breakdown"]  = reward_breakdown
-    final_cfg["dqn_action_space"]          = {
-        "discrete":             len(agent.ACTIONS),
-        "continuous_magnitudes": agent.MAGNITUDES,
-    }
-    final_cfg["replay_buffer_size"] = len(agent.replay)
-    final_cfg["rl_history_key"]     = history_key
-    final_cfg["dqn_state_dim"]      = agent.state_dim  # expose for debugging
-
-    # Persist best config for warm-start on next document
-    _save_history(history_key, final_cfg, best_components)
+    # ── Build final config ────────────────────────────────────────────────────
+    final_cfg = copy.deepcopy(winner_result.get("best_params", config))
+    final_cfg.update({
+        "optimizer":                 "optuna_tpe" if _OPTUNA_AVAILABLE else "random_search",
+        "rl_history_key":            history_key,
+        "n_trials_run":              len(reward_history) - 1,
+        "baseline_reward":           baseline_reward,
+        "best_reward":               round(best_reward, 4),
+        "improvement_over_baseline": round(best_reward - baseline_reward, 4),
+        "overall_winner_strategy":   overall_winner,
+        "chunking_strategy":         overall_winner,
+        "per_strategy_results":      {
+            s: {k: v for k, v in r.items() if k != "best_chunks"}
+            for s, r in per_strategy_results.items()
+        },
+    })
 
     return best_chunks, reward_history, final_cfg
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Reward computation
+# Optuna TPE optimisation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_strategy_optuna(
+    text, doc_type, doc_profile, model_name, warm_cfg,
+    strategy, n_min, n_max, baseline_score,
+    best_chunks, best_score, best_cfg, max_trials,
+):
+    """
+    Dedicated Optuna TPE study for ONE specific strategy.
+    Every trial tests the same strategy with different hyperparameters.
+    The TPE surrogate learns: params → quality for THIS strategy only.
+    Reward = _strategy_quality_score (same as S2 — directly comparable).
+    """
+    import optuna
+    from optuna.samplers import TPESampler
+    from .s2_chunkers import _strategy_quality_score as _sqscore
+
+    sampler = TPESampler(seed=42, n_startup_trials=min(3, max_trials), multivariate=True)
+    study   = optuna.create_study(direction="maximize", sampler=sampler)
+
+    no_improve    = 0
+    trial_rewards: List[float] = []
+
+    def objective(trial):
+        nonlocal best_chunks, best_score, best_cfg, no_improve
+
+        trial_cfg    = _suggest_config(trial, warm_cfg, strategy)
+        trial_chunks = _run_pipeline(text, doc_type, doc_profile, model_name, trial_cfg, strategy)
+
+        if trial_chunks is None:
+            trial_rewards.append(round(best_score, 4))
+            return baseline_score - 0.1
+
+        reward = round(float(_sqscore(
+            trial_chunks,
+            trial_cfg.get("n_min", n_min),
+            trial_cfg.get("n_max", n_max),
+        )), 4)
+        trial_rewards.append(reward)
+
+        if reward > best_score:
+            best_score  = reward
+            best_chunks = trial_chunks
+            best_cfg    = trial_cfg
+            no_improve  = 0
+        else:
+            no_improve += 1
+
+        return reward
+
+    for idx in range(max_trials):
+        if idx >= _MIN_TRIALS_BEFORE_STOP and no_improve >= _PATIENCE_TRIALS:
+            break
+        try:
+            t = study.ask()
+            study.tell(t, objective(t))
+        except Exception as exc:
+            logger.debug("S7 [%s] trial %d: %s", strategy, idx, exc)
+            trial_rewards.append(round(best_score, 4))
+
+    return best_chunks, best_score, best_cfg, trial_rewards
+
+
+def _run_strategy_random(
+    text, doc_type, doc_profile, model_name, warm_cfg,
+    strategy, n_min, n_max, baseline_score,
+    best_chunks, best_score, best_cfg, max_trials,
+):
+    """Random search fallback for ONE strategy. Uses _strategy_quality_score."""
+    from .s2_chunkers import _strategy_quality_score as _sqscore
+
+    rng = np.random.RandomState(abs(hash(strategy)) % (2**31))
+    trial_rewards: List[float] = []
+
+    for _ in range(max_trials):
+        trial_cfg    = _random_config(warm_cfg, rng, strategy)
+        trial_chunks = _run_pipeline(text, doc_type, doc_profile, model_name, trial_cfg, strategy)
+
+        if trial_chunks is None:
+            trial_rewards.append(round(best_score, 4))
+            continue
+
+        reward = round(float(_sqscore(
+            trial_chunks,
+            trial_cfg.get("n_min", n_min),
+            trial_cfg.get("n_max", n_max),
+        )), 4)
+        trial_rewards.append(reward)
+
+        if reward > best_score:
+            best_score  = reward
+            best_chunks = trial_chunks
+            best_cfg    = trial_cfg
+
+    return best_chunks, best_score, best_cfg, trial_rewards
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hyperparameter search space helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _suggest_config(trial: Any, base_cfg: Dict[str, Any], s2_winner: str) -> Dict[str, Any]:
+    """
+    Ask Optuna to suggest values for each tunable hyperparameter.
+
+    chunking_strategy is locked to s2_winner — the BO tunes the parameters
+    FOR that strategy, not across all strategies.
+    """
+    cfg = copy.deepcopy(base_cfg)
+
+    cfg["tau_jsd_low"]  = trial.suggest_float("tau_jsd_low",  0.05, 0.40)
+    cfg["tau_jsd_high"] = trial.suggest_float("tau_jsd_high", 0.20, 0.80)
+    cfg["n_max"]        = trial.suggest_int(  "n_max",        150,  900, step=25)
+    cfg["n_min"]        = trial.suggest_int(  "n_min",        30,   250, step=10)
+    cfg["tau_sem"]      = trial.suggest_float("tau_sem",      0.40, 0.95)
+    cfg["tau_percentile_low"]  = trial.suggest_float("tau_percentile_low",  5,  45)
+    cfg["tau_percentile_high"] = trial.suggest_float("tau_percentile_high", 55, 95)
+
+    # Enforce constraints
+    if cfg["tau_jsd_low"] >= cfg["tau_jsd_high"] - 0.08:
+        cfg["tau_jsd_high"] = min(0.80, cfg["tau_jsd_low"] + 0.10)
+    if cfg["n_min"] >= cfg["n_max"]:
+        cfg["n_min"] = max(30, cfg["n_max"] - 50)
+
+    # Lock strategy — every trial uses the S2 winner
+    cfg["chunking_strategy"] = s2_winner
+    cfg["entropy_metric"]    = base_cfg.get("entropy_metric", "hybrid")
+    cfg["_in_rl_calibration"] = True
+
+    return cfg
+
+
+def _random_config(base_cfg: Dict[str, Any], rng: np.random.RandomState, s2_winner: str) -> Dict[str, Any]:
+    """Random search config locked to s2_winner strategy."""
+    cfg = copy.deepcopy(base_cfg)
+
+    cfg["tau_jsd_low"]  = float(rng.uniform(0.05, 0.40))
+    cfg["tau_jsd_high"] = float(rng.uniform(0.20, 0.80))
+    cfg["n_max"]        = int(rng.randint(6, 37) * 25)
+    cfg["n_min"]        = int(rng.randint(3, 26) * 10)
+    cfg["tau_sem"]      = float(rng.uniform(0.40, 0.95))
+    cfg["tau_percentile_low"]  = float(rng.uniform(5,  45))
+    cfg["tau_percentile_high"] = float(rng.uniform(55, 95))
+
+    if cfg["tau_jsd_low"] >= cfg["tau_jsd_high"] - 0.08:
+        cfg["tau_jsd_high"] = min(0.80, cfg["tau_jsd_low"] + 0.10)
+    if cfg["n_min"] >= cfg["n_max"]:
+        cfg["n_min"] = max(30, cfg["n_max"] - 50)
+
+    cfg["chunking_strategy"]  = s2_winner
+    cfg["entropy_metric"]     = base_cfg.get("entropy_metric", "hybrid")
+    cfg["_in_rl_calibration"] = True
+
+    return cfg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pipeline runner — S2 through S6 with a given config
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_pipeline(
+    text: str,
+    doc_type: str,
+    doc_profile: Dict[str, Any],
+    model_name: str,
+    cfg: Dict[str, Any],
+    s2_winner: str,
+) -> Optional[List[Dict]]:
+    """
+    Run S2 (locked to s2_winner) → S3 → S4 → S5 → S6 with trial config.
+
+    The strategy is locked: instead of running all chunkers and selecting
+    the best one (which changes per trial), we run ONLY the s2_winner
+    chunker.  This gives the TPE surrogate model clean, consistent signal:
+    it learns how params affect quality for one specific strategy, not a
+    mixture of strategies.
+    """
+    try:
+        cfg["_full_text_sample"]  = text[:3000]
+        cfg["chunking_strategy"]  = s2_winner   # enforce the lock
+
+        # Import the specific chunker for the locked strategy
+        from .s2_chunkers import (
+            recursive_character_split, sliding_window_split,
+            structure_based_split, semantic_boundary_split,
+            sentence_cluster_split, paragraph_pack_split,
+            legal_article_split, hybrid_legal_semantic_split,
+            _quality_pass,
+        )
+        from .s3_entropy import refine_boundaries
+        from .s4_boundary import filter_boundaries
+        from .s5_graph import enrich_graph
+        from .s6_embedding import embed_chunks
+
+        n_min = int(cfg.get("n_min", 100))
+        n_max = int(cfg.get("n_max", 500))
+
+        # ── Run ONLY the locked strategy ─────────────────────────────────────
+        strategy_map = {
+            "recursive":              lambda: recursive_character_split(text, n_min, n_max, doc_type),
+            "sliding_window":         lambda: sliding_window_split(text, n_max, int(n_max * 0.15)),
+            "structure":              lambda: structure_based_split(text, doc_type, n_min, n_max),
+            "semantic_boundaries":    lambda: semantic_boundary_split(text, n_min, n_max, cfg),
+            "sentence_clustering":    lambda: sentence_cluster_split(text, n_min, n_max, cfg),
+            "paragraph_pack":         lambda: paragraph_pack_split(text, n_min, n_max),
+            "legal_articles":         lambda: legal_article_split(text, n_min, n_max),
+            "hybrid_legal_semantic":  lambda: hybrid_legal_semantic_split(text, n_min, n_max, cfg),
+        }
+
+        chunker_fn = strategy_map.get(s2_winner, strategy_map["structure"])
+        trial_chunks = chunker_fn()
+
+        if not trial_chunks:
+            return None
+
+        # Apply quality pass (same as S2 does after chunking)
+        trial_chunks = _quality_pass(trial_chunks, text, n_min, n_max, s2_winner)
+
+        # S3 → S4 → S5 → S6
+        trial_chunks = refine_boundaries(trial_chunks, cfg)
+        trial_chunks = filter_boundaries(trial_chunks, doc_type, [], cfg)
+        trial_chunks = enrich_graph(trial_chunks, [], cfg)
+        trial_chunks, _ = embed_chunks(trial_chunks, text, doc_profile, model_name, cfg)
+
+        return trial_chunks
+
+    except Exception as exc:
+        logger.debug("S7 pipeline trial failed: %s", exc)
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reward function
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _compute_reward_components(
@@ -458,16 +585,86 @@ def _compute_reward_components(
     weights: Dict[str, float],
 ) -> Dict[str, float]:
     """
-    Compute the multi-objective reward signal from a chunk set.
+    Compute the multi-objective reward for a chunk set.
 
-    Components:
-      quality     — how well chunks are bounded (1 - mean boundary similarity)
-      coverage    — fraction of probe queries answered by at least one chunk
-      consistency — how uniform chunk sizes are (low variance = high score)
-      efficiency  — how close chunk count is to the ideal target count
-      structural  — NEW: alignment with real structural/legal boundaries
+    Five components (all ∈ [0, 1], higher is better):
 
-    Final reward = weighted sum of all components.
+    1. quality
+       ─────────
+       Combines inter-chunk separation and intra-chunk coherence.
+
+       separation = mean cosine distance between adjacent chunk hash
+                    embeddings.  High separation → boundaries are at real
+                    topic shifts, not arbitrary cuts.
+
+         separation(i, i+1) = 1 − cosine(embed(Cᵢ), embed(Cᵢ₊₁))
+
+       icc = mean intra-chunk coherence (from S4).
+             ICC(C) = mean Jaccard(sᵢ, sᵢ₊₁) over consecutive sentences.
+             High ICC → each chunk is internally coherent.
+
+       quality = 0.55 × separation + 0.45 × icc
+
+       NOTE: this is NOT the S4 boundary_score.  S4 boundary_score measures
+       similarity (high = similar = bad boundary).  separation measures
+       DISTANCE (high = different = good boundary).  They are complementary
+       but not circular — separation uses a fast hash embedding recomputed
+       here, independent of S4.
+
+    2. coverage
+       ────────
+       Measures how PRECISELY the chunk set answers each probe query.
+
+       For each probe, we find the single best-matching chunk (highest
+       token overlap).  Then we penalise it if it is too large:
+
+         precision_score = icc_of_best_chunk × (target_size / actual_size)
+                           clipped to [0, 1]
+
+       where target_size = TARGET_WORDS_PER_CHUNK.
+       A small, coherent chunk that contains the answer scores near 1.
+       A 900-word blob that buries the answer scores much lower.
+
+       This avoids the "trivially 1.0" problem of the old recall proxy.
+
+    3. consistency
+       ───────────
+       Penalises high variance in chunk sizes:
+
+         consistency = 1 − CV   where CV = std(sizes) / mean(sizes)
+
+       Low variance → the chunker found stable natural units across the
+       document (good).  High variance → some chunks are huge fragments,
+       others are tiny slivers (bad).
+
+    4. efficiency
+       ──────────
+       Rewards chunk count close to the document-derived ideal:
+
+         target_count = total_words / TARGET_WORDS_PER_CHUNK
+         efficiency   = 1 − |len(chunks) − target_count| / target_count
+
+       This directly penalises the original problem (8 chunks for a
+       6478-word document that needs ~22).
+
+    5. structural
+       ──────────
+       Domain-aware signal for legal/regulatory/financial documents:
+
+         structural = 0.5 × hard_boundary_ratio + 0.5 × mean_pmi_drop
+
+       hard_boundary_ratio : fraction of chunks starting at a protected
+                             structural marker (Article, CHAPITRE, etc.)
+       mean_pmi_drop       : mean concept shift at boundaries (from S3
+                             boundary_features dict)
+
+    Final reward
+    ────────────
+      total = w_quality × quality
+            + w_coverage × coverage
+            + w_consistency × consistency
+            + w_efficiency × efficiency
+            + 0.10 × structural          ← fixed bonus, always included
     """
     if not chunks:
         return {
@@ -475,75 +672,112 @@ def _compute_reward_components(
             "efficiency": 0.0, "structural": 0.0, "total": -1.0,
         }
 
-    # ── quality: chunks with high boundary_score are too similar to their
-    # neighbors — a bad split. Reward = 1 - boundary_score.
-    quality = float(np.mean([
-        1.0 - c.get("boundary_score", 0.5) for c in chunks
-    ]))
+    # ── 1. quality = separation + icc ────────────────────────────────────────
+    # Inter-chunk separation: cosine distance between adjacent hash embeddings.
+    # We recompute hash embeddings here (independent of S4 scores — not circular).
+    separations: List[float] = []
+    for i in range(len(chunks) - 1):
+        v1 = _hash_embed(chunks[i].get("text", ""),     dim=128)
+        v2 = _hash_embed(chunks[i + 1].get("text", ""), dim=128)
+        n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+        if n1 > 0 and n2 > 0:
+            cos_dist = 1.0 - float(np.dot(v1, v2) / (n1 * n2))
+            separations.append(float(np.clip(cos_dist, 0.0, 1.0)))
 
-    # ── coverage: fraction of probe queries answered by the chunk set
-    coverage = _recall_proxy(chunks, probes)
+    separation = float(np.mean(separations)) if separations else 0.5
 
-    # ── consistency: penalize high variance in chunk sizes
-    size = np.array([
-        len(c.get("text", "").split()) for c in chunks
-    ], dtype=np.float32)
-    consistency = float(
-        1.0 - min(1.0, np.std(size) / max(np.mean(size), 1.0))
+    # Intra-chunk ICC from S4 (already computed per chunk)
+    icc_vals = [float(c.get("icc", 0.5)) for c in chunks]
+    mean_icc = float(np.mean(icc_vals))
+
+    quality = float(np.clip(0.55 * separation + 0.45 * mean_icc, 0.0, 1.0))
+
+    # ── 2. coverage = precision-weighted probe recall ─────────────────────────
+    coverage = _precision_recall_proxy(chunks, probes)
+
+    # ── 3. consistency = 1 - coefficient_of_variation ────────────────────────
+    sizes = np.array(
+        [max(1, len(c.get("text", "").split())) for c in chunks],
+        dtype=np.float32,
     )
+    cv    = float(np.std(sizes) / max(float(np.mean(sizes)), 1.0))
+    consistency = float(np.clip(1.0 - cv, 0.0, 1.0))
 
-    # ── efficiency: reward chunk count close to the ideal target
+    # ── 4. efficiency = proximity to ideal chunk count ────────────────────────
     target     = _target_count(chunks)
     efficiency = float(
-        1.0 - min(1.0, abs(len(chunks) - target) / max(target, 1.0))
+        np.clip(1.0 - abs(len(chunks) - target) / max(target, 1.0), 0.0, 1.0)
     )
 
-    # ── structural: NEW component for financial/regulatory documents
-    # Rewards two things:
-    #   (a) chunks that end at protected/hard boundaries (Article, Section...)
-    #   (b) high mean PMI-drop across chunks (real concept shifts at boundaries)
+    # ── 5. structural = hard_boundary_ratio + mean PMI-drop ─────────────────
     hard_ratio = sum(
         1 for c in chunks
         if c.get("boundary_type") in {"hard", "protected_structure_boundary"}
     ) / max(len(chunks), 1)
 
-    # Extract mean PMI-drop from the boundary_features dict populated by S3
-    mean_pmi = float(np.mean([
-        c.get("boundary_features", {}).get("pmi_drop",
-            c.get("pmi_drop", 0.5))   # fallback to direct field if available
+    # Read PMI-drop from the boundary_features dict that S3 populates
+    pmi_values = [
+        float(c.get("boundary_features", {}).get("pmi_drop",
+              c.get("pmi_drop", 0.5)))
         for c in chunks
-    ]))
+    ]
+    mean_pmi = float(np.mean(pmi_values))
 
-    # structural score combines hard boundary ratio and concept shift strength
     structural = float(np.clip(0.5 * hard_ratio + 0.5 * mean_pmi, 0.0, 1.0))
 
-    # ── Total: weighted sum of the 4 configurable components + fixed structural bonus
+    # ── 6. Mid-sentence penalty (subtract from total) ────────────────────────
+    # Penalise any chunk that starts mid-sentence (lowercase first char that
+    # is not a legal list marker).  This directly penalises the BO for finding
+    # n_max values that cause recursive/paragraph_pack to cut inside sentences.
+    # Each mid-sentence start deducts 0.04 from the total reward.
+    mid_sentence_count = sum(
+        1 for c in chunks
+        if (c.get("text", "").strip()[:1].islower()
+            and not re.match(r"^\d+\)", c.get("text", "").strip())
+            and not re.match(r"^[a-z][-\)]\s", c.get("text", "").strip()))
+    )
+    mid_sentence_penalty = float(
+        np.clip(mid_sentence_count * 0.04, 0.0, 0.20)
+    )
+
+    # ── Total ────────────────────────────────────────────────────────────────
     total = (
-        weights["quality"]      * quality
-        + weights["coverage"]   * coverage
-        + weights["consistency"]* consistency
-        + weights["efficiency"] * efficiency
-        + 0.15 * structural     # fixed bonus — not user-configurable to keep weights summing to 1
+        weights["quality"]       * quality
+        + weights["coverage"]    * coverage
+        + weights["consistency"] * consistency
+        + weights["efficiency"]  * efficiency
+        + 0.10                   * structural       # fixed domain-structure bonus
+        - mid_sentence_penalty                      # penalise mid-sentence cuts
     )
 
     return {
-        "quality":     round(quality,     4),
-        "coverage":    round(coverage,    4),
-        "consistency": round(consistency, 4),
-        "efficiency":  round(efficiency,  4),
-        "structural":  round(structural,  4),  # NEW: visible in reward breakdown
-        "total":       round(float(total), 4),
+        "quality":              round(quality,              4),
+        "coverage":             round(coverage,             4),
+        "consistency":          round(consistency,          4),
+        "efficiency":           round(efficiency,           4),
+        "structural":           round(structural,           4),
+        "mid_sentence_penalty": round(mid_sentence_penalty, 4),
+        "total":                round(float(np.clip(total, 0.0, 1.0)), 4),
     }
 
 
 def _objective_weights(config: Dict[str, Any]) -> Dict[str, float]:
     """
-    Parse user-configured objective weights from config dict.
-    Defaults: quality=0.35, coverage=0.30, consistency=0.20, efficiency=0.15
-    Normalizes so they always sum to 1.0.
+    Parse user-configured objective weights from the config dict.
+
+    Defaults:
+      quality=0.35, coverage=0.25, consistency=0.20, efficiency=0.20
+
+    The weights are normalised so they always sum to 1.0.  This means
+    the user can supply any positive values and they will be rescaled.
     """
-    defaults  = {"quality": 0.35, "coverage": 0.30, "consistency": 0.20, "efficiency": 0.15}
-    incoming  = config.get("reward_objectives", {})
+    defaults = {
+        "quality":     0.35,
+        "coverage":    0.25,
+        "consistency": 0.20,
+        "efficiency":  0.20,
+    }
+    incoming = config.get("reward_objectives", {})
     if not isinstance(incoming, dict):
         incoming = {}
     raw = {k: float(incoming.get(k, v)) for k, v in defaults.items()}
@@ -552,79 +786,163 @@ def _objective_weights(config: Dict[str, Any]) -> Dict[str, float]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Probe queries and recall proxy
+# Probe generation & coverage evaluation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _recall_proxy(chunks: List[Dict], probes: List[str]) -> float:
+def _generate_probes(text: str, n: int = 10) -> List[str]:
     """
-    Estimate recall: fraction of probe queries answered by at least one chunk.
-    A probe is "answered" if at least one chunk contains ≥1 of the probe's
-    content words (4+ characters, not stopwords).
-    """
-    if not probes:
-        return 0.5  # neutral if no probes generated
+    Generate probe queries from document structure for the coverage metric.
 
-    hits = 0
-    for q in probes:
-        # Extract content words from the probe (≥4 chars filters out stopwords)
-        terms = set(re.findall(r"\b\w{4,}\b", q.lower()))
-        if not terms:
-            hits += 1  # empty probe counts as hit
-            continue
-        # Check if any chunk contains at least one probe term
-        found = any(
-            bool(terms & set(re.findall(r"\b\w+\b", c.get("text", "").lower())))
-            for c in chunks
-        )
-        if found:
-            hits += 1
+    Strategy (priority order):
+    1. Legal/structural headings: Article N, CHAPITRE N, TITRE N
+       These are the most semantically precise anchors in legal documents.
+    2. Markdown headings (# Title) — for technical and academic documents.
+    3. Numbered section lines (1.1, 2.3.4 …) — for regulatory/policy docs.
+    4. First sentence of each paragraph (≥ 8 words) — universal fallback.
 
-    return hits / len(probes)
-
-
-def _target_count(chunks: List[Dict]) -> float:
-    """
-    Compute the ideal number of chunks for this document.
-    Based on total word count divided by target words-per-chunk.
-    """
-    total_words = sum(len(c.get("text", "").split()) for c in chunks)
-    return max(3.0, total_words / _TARGET_WORDS_PER_CHUNK)
-
-
-def _generate_probes(text: str, n: int = 5) -> List[str]:
-    """
-    Auto-generate n probe queries from document structure.
-    First tries Markdown headings, then falls back to first sentences
-    of paragraphs (minimum 5 words).
+    Each probe is a short natural-language phrase that a retrieval system
+    might use to query the chunk set.  The coverage metric measures whether
+    the best-matching chunk is small and coherent, not just whether it exists.
     """
     probes: List[str] = []
 
-    # Try headings first (most reliable for structured docs)
-    for m in re.finditer(r"^#{1,3}\s+(.+)$", text, re.MULTILINE):
-        probes.append(m.group(1).strip())
+    # ── 1. Legal article/section headings ───────────────────────────────────
+    for m in re.finditer(
+        r"(?im)^\s*((?:Article|Art\.?|ARTICLE|CHAPITRE|TITRE|SECTION)\s+\w+[^\n]{0,60})",
+        text,
+    ):
+        probe = m.group(1).strip()
+        if 3 <= len(probe.split()) <= 12:
+            probes.append(probe)
         if len(probes) >= n:
             return probes
 
-    # Fall back to first sentences of paragraphs
+    # ── 2. Markdown headings ─────────────────────────────────────────────────
+    for m in re.finditer(r"^#{1,3}\s+(.+)$", text, re.MULTILINE):
+        probe = m.group(1).strip()
+        if 2 <= len(probe.split()) <= 12:
+            probes.append(probe)
+        if len(probes) >= n:
+            return probes
+
+    # ── 3. Numbered section lines ────────────────────────────────────────────
+    for m in re.finditer(r"(?m)^\s*(\d+(?:\.\d+)+)\s+(.+)$", text):
+        probe = (m.group(1) + " " + m.group(2)).strip()
+        if len(probe.split()) >= 3:
+            probes.append(probe[:100])
+        if len(probes) >= n:
+            return probes
+
+    # ── 4. First sentence of paragraphs (fallback) ───────────────────────────
     for para in re.split(r"\n{2,}", text):
         p = para.strip()
         if not p:
             continue
-        sent = re.split(r"(?<=[.!?])\s+", p)
-        if sent and len(sent[0].split()) >= 5:
-            probes.append(sent[0].strip())
+        sentences = re.split(r"(?<=[.!?])\s+", p)
+        if sentences and len(sentences[0].split()) >= 8:
+            probes.append(sentences[0].strip()[:120])
         if len(probes) >= n:
             break
 
     return probes[:n]
 
 
+def _precision_recall_proxy(chunks: List[Dict], probes: List[str]) -> float:
+    """
+    Precision-weighted coverage metric.
+
+    For each probe query:
+      1. Find the chunk with the highest token overlap with the probe.
+      2. Score:  precision = overlap_ratio × size_penalty
+         where:
+           overlap_ratio = |probe_terms ∩ chunk_terms| / |probe_terms|
+           size_penalty  = min(1.0, TARGET_WORDS_PER_CHUNK / chunk_words)
+
+    WHY ICC WAS REMOVED
+    ───────────────────
+    The original multiplied by chunk_icc, creating a hard ceiling at mean_icc
+    ≈ 0.18 for legal documents.  Every strategy scored ≤ 0.18 regardless of
+    actual retrieval quality — coverage was useless as a discriminating signal.
+
+    ICC is already captured in the `quality` reward component.  Including it
+    in coverage too double-penalised low-ICC chunks and made the two components
+    correlated.  Coverage now measures purely: "can this chunk set answer the
+    probe?" — independent of internal coherence.
+    """
+    if not probes:
+        return 0.5
+
+    target = float(_TARGET_WORDS_PER_CHUNK)
+    scores: List[float] = []
+
+    for probe in probes:
+        probe_terms = set(re.findall(r"\b\w{3,}\b", probe.lower()))
+        if not probe_terms:
+            scores.append(0.5)
+            continue
+
+        best_score = 0.0
+        for chunk in chunks:
+            chunk_tokens = set(re.findall(r"\b\w+\b", chunk.get("text", "").lower()))
+            overlap      = len(probe_terms & chunk_tokens)
+            if overlap == 0:
+                continue
+
+            overlap_ratio = overlap / len(probe_terms)
+            chunk_words   = max(1, len(chunk.get("text", "").split()))
+            size_penalty  = min(1.0, target / chunk_words)
+
+            # ICC deliberately excluded — it is already in the quality component
+            precision  = float(np.clip(overlap_ratio * size_penalty, 0.0, 1.0))
+            best_score = max(best_score, precision)
+
+        scores.append(best_score)
+
+    return float(np.mean(scores)) if scores else 0.5
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# RL history persistence (warm-start across documents)
+# Utility helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _target_count(chunks: List[Dict]) -> float:
+    """
+    Ideal chunk count = total document words / TARGET_WORDS_PER_CHUNK.
+    Clamped to at least 3 to avoid degenerate single-chunk edge cases.
+    """
+    total_words = sum(max(1, len(c.get("text", "").split())) for c in chunks)
+    return max(3.0, total_words / _TARGET_WORDS_PER_CHUNK)
+
+
+def _hash_embed(text: str, dim: int = 128) -> np.ndarray:
+    """
+    Lightweight bag-of-words hash embedding.
+
+    Maps each content token to a position in a dim-dimensional vector via
+    Python's built-in hash function, accumulates counts, and L2-normalises.
+
+    Used ONLY for the separation component of the quality reward so that
+    it is independent of S4/S6 scores (no circular reward feedback).
+    """
+    vec = np.zeros(dim, dtype=np.float32)
+    for tok in re.findall(r"\b\w{3,}\b", text.lower()):
+        vec[hash(tok) % dim] += 1.0
+    n = np.linalg.norm(vec)
+    return vec / n if n > 0 else vec
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Persistence: warm-start across documents of the same domain
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _load_history() -> Dict[str, Any]:
-    """Load the persisted RL history from disk. Returns empty dict if not found."""
+    """
+    Load the persisted optimisation history from disk.
+
+    Returns an empty dict if the file does not exist or is corrupted.
+    Each key is a domain string (e.g. "regulatory", "legal").
+    Each value contains the best config params and past Optuna trial data.
+    """
     if not os.path.exists(_RL_HISTORY_PATH):
         return {}
     try:
@@ -640,23 +958,25 @@ def _warm_start_config(
     domain: str,
 ) -> Dict[str, Any]:
     """
-    Initialize the trial config with the best known values for this domain.
-    Only fills in keys that the user hasn't explicitly set in the request.
-    Updated to include the two new percentile parameters.
+    Initialise the trial config with the best known parameter values for
+    this domain from previous runs.
+
+    Rule: only fills in keys that the user has NOT explicitly provided in
+    the incoming config dict.  User-supplied values always take precedence.
     """
     out    = copy.deepcopy(config)
     record = history.get(domain, {})
 
-    # List of all RL-tunable parameters (updated to include percentile controls)
+    # All tunable parameters — same as the search space in _suggest_config
     tunable_keys = (
-        "tau_jsd_low", "tau_jsd_high", "n_max", "tau_sem",
-        "tau_percentile_low", "tau_percentile_high",   # NEW
-        "hybrid_lambda", "merge_weight",
+        "tau_jsd_low", "tau_jsd_high",
+        "n_max", "n_min",
+        "tau_sem",
+        "tau_percentile_low", "tau_percentile_high",
     )
 
     for k in tunable_keys:
-        v = record.get(k)
-        # Only use historical value if the user hasn't explicitly set this key
+        v = record.get("best_params", {}).get(k)
         if v is not None and k not in out:
             out[k] = v
 
@@ -669,32 +989,51 @@ def _save_history(
     reward_components: Dict[str, float],
 ) -> None:
     """
-    Persist the best found configuration for this domain.
-    This enables warm-start on the next document of the same domain.
-    Updated to save the new percentile parameters.
+    Persist the best found configuration and reward for this domain.
+
+    Stored structure:
+    {
+      "domain_key": {
+        "best_params":  { ... tunable params ... },
+        "best_reward":  float,
+        "last_reward_components": { ... },
+        "optuna_trials": [ { "params": {...}, "value": float }, ... ]
+      }
+    }
+
+    optuna_trials stores a lightweight record of each trial so the TPE
+    surrogate model can be seeded from past runs on subsequent documents.
     """
     history = _load_history()
 
-    # Build the record to save
-    record: Dict[str, Any] = {
-        "last_reward_components": reward_components
-    }
-
-    # Save all tunable parameters (including new ones)
     tunable_keys = (
-        "tau_jsd_low", "tau_jsd_high", "n_max", "tau_sem",
-        "tau_percentile_low", "tau_percentile_high",   # NEW
-        "hybrid_lambda", "merge_weight",
+        "tau_jsd_low", "tau_jsd_high",
+        "n_max", "n_min",
+        "tau_sem",
+        "tau_percentile_low", "tau_percentile_high",
     )
-    for k in tunable_keys:
-        v = config.get(k)
-        if v is not None:
-            record[k] = v
 
-    history[domain] = record
+    best_params = {k: config.get(k) for k in tunable_keys if config.get(k) is not None}
+
+    # Preserve any existing optuna_trials so they accumulate across runs
+    existing_trials = history.get(domain, {}).get("optuna_trials", [])
+
+    # Add the current best as a new trial record for future warm-starting
+    new_trial = {"params": best_params, "value": reward_components.get("total", 0.0)}
+    updated_trials = existing_trials + [new_trial]
+
+    # Cap to 200 stored trials to prevent unbounded file growth
+    updated_trials = updated_trials[-200:]
+
+    history[domain] = {
+        "best_params":             best_params,
+        "best_reward":             reward_components.get("total", 0.0),
+        "last_reward_components":  reward_components,
+        "optuna_trials":           updated_trials,
+    }
 
     try:
         with open(_RL_HISTORY_PATH, "w", encoding="utf-8") as fh:
             json.dump(history, fh, ensure_ascii=False, indent=2)
     except Exception:
-        pass  # Silently ignore write failures (e.g. read-only filesystem)
+        pass   # silently ignore write failures (e.g. read-only filesystem)

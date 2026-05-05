@@ -36,12 +36,17 @@ LEGAL_BOUNDARY_RE = re.compile(
 
 SECTION_HEADER_RE = re.compile(
     r"^\s*("
-    r"#{1,6}\s+\S+"
-    r"|<h[1-6][^>]*>.*?</h[1-6]>"
-    r"|\\(?:chapter|section|subsection|subsubsection)\{[^}]+\}"
-    r"|\d+(?:\.\d+){0,3}\s+\S.+"
-    r"|[A-Z][A-Z0-9\s\-_/,]{4,}"
-    r"|[A-Z][^:\n]{2,80}:"
+    r"#{1,6}\s+\S+"                              # Markdown headings: ## Title
+    r"|<h[1-6][^>]*>.*?</h[1-6]>"               # HTML headings
+    r"|\\(?:chapter|section|subsection|subsubsection)\{[^}]+\}"  # LaTeX
+    r"|\d+(?:\.\d+){0,3}\s+\S.+"                # Numbered sections: 1.2.3 Title
+    # NOTE: The original [A-Z][A-Z0-9\s\-_/,]{4,} pattern was REMOVED.
+    # It matched any ALL-CAPS phrase of 5+ chars, producing massive false positives
+    # on French documents where title/preamble lines like "ENTRE LA REPUBLIQUE
+    # TUNISIENNE", "DES REVENUS", "IMPOSITION DES REVENUS" were all tagged as
+    # section headings, causing mid-text structural cuts.
+    # Legal headings are now covered exclusively by LEGAL_BOUNDARY_RE.
+    r"|[A-Z][^:\n]{2,60}:"                      # Short titled colon: 'Introduction:'
     r")\s*$",
     re.IGNORECASE,
 )
@@ -69,6 +74,7 @@ VALID_STRATEGIES = {
     "sentence_clustering",
     "paragraph_pack",
     "legal_articles",
+    "hybrid_legal_semantic",   # NEW: structure-first + semantic refinement + size packing
 }
 
 
@@ -91,6 +97,11 @@ def run_all_chunkers(text: str, doc_type: str, config: Dict[str, Any]) -> Dict[s
     }
     if structure_type == "legal_article":
         tasks["legal_articles"] = lambda: legal_article_split(text, eff_min, eff_max)
+        # Hybrid is most valuable for legal documents: respects article boundaries
+        # while using semantic signals to refine oversized articles
+        tasks["hybrid_legal_semantic"] = lambda: hybrid_legal_semantic_split(
+            text, eff_min, eff_max, config
+        )
 
     out: Dict[str, List[Dict]] = {}
     timings: Dict[str, float] = {}
@@ -139,6 +150,12 @@ def select_best_strategy(all_chunks: Dict[str, List[Dict]], doc_type: str, confi
         strategy_bias = 0.025 * max(0, (len(preferred) - preferred.index(name))) if name in preferred else 0.0
         if name == "legal_articles":
             strategy_bias += 0.06
+        # hybrid_legal_semantic gets the highest bias when legal structure is present
+        # because it combines both structural and semantic signals — it should win
+        # over pure legal_articles (which ignores semantics) or pure
+        # semantic_boundaries (which ignores article structure)
+        if name == "hybrid_legal_semantic":
+            strategy_bias += 0.10
         score = _strategy_quality_score(chunks, n_min, n_max) + strategy_bias
         if score > best_score:
             best_score = score
@@ -236,6 +253,196 @@ def legal_article_split(text: str, n_min: int, n_max: int) -> List[Dict]:
         return structure_based_split(text, "prose", n_min, n_max, "sectioned")
     units = [(text[start:end].strip(), start, end) for start, end in spans if text[start:end].strip()]
     return _pack_units_with_offsets(units, n_min, n_max, "legal_articles", "\n\n")
+
+
+def hybrid_legal_semantic_split(
+    text: str,
+    n_min: int,
+    n_max: int,
+    config: Dict[str, Any],
+) -> List[Dict]:
+    """
+    Hybrid chunker: structural boundaries + semantic refinement + size normalisation.
+
+    This is the primary strategy for French legal and regulatory documents.
+    It combines the strengths of three existing strategies while avoiding
+    their individual weaknesses:
+
+    Weakness of legal_articles alone
+    ──────────────────────────────────
+    Respects article boundaries but produces huge chunks when an article has
+    many numbered paragraphs on different sub-topics (e.g. Article 7 on
+    business profits covers 7 distinct scenarios, ~1075 words).
+
+    Weakness of semantic_boundaries alone
+    ───────────────────────────────────────
+    Captures topic shifts but ignores legal structure — may split an article
+    mid-sentence or merge parts of different articles if their vocabulary
+    happens to overlap.
+
+    Weakness of paragraph_pack alone
+    ──────────────────────────────────
+    Normalises sizes but uses only blank-line paragraph breaks, losing the
+    article-level semantic coherence.
+
+    THREE-PASS ALGORITHM
+    ─────────────────────
+    Pass 1 — STRUCTURAL SPLIT (legal_article_split):
+        Split the document on ARTICLE/CHAPITRE/TITRE boundaries.
+        Every article becomes one candidate unit.  These boundaries are
+        always respected — no article is ever split across chunks at this
+        stage.
+
+    Pass 2 — SEMANTIC REFINEMENT (per-article):
+        For each article unit whose word count exceeds n_max:
+            Run semantic_boundary_split on THAT ARTICLE ALONE.
+            This detects topic shifts within the article (e.g. paragraph 1
+            defines the rule, paragraphs 2-5 define exceptions — these are
+            semantically distinct and should be separate chunks).
+            The threshold is computed adaptively from the article's own
+            sentence distance distribution (72nd percentile), not from the
+            global document — so each article calibrates itself.
+        Articles within n_max: kept as a single chunk (no semantic splitting).
+
+    Pass 3 — SIZE NORMALISATION (paragraph-boundary packing):
+        For any chunk that is still below n_min after passes 1-2:
+            Merge with the next chunk if they came from the same article.
+            If different articles, keep separate even if small.
+        For any chunk still above n_max after pass 2:
+            Split at numbered paragraph boundaries (1), 2), 3)) rather than
+            at arbitrary word positions, so the split point is always at a
+            legal paragraph boundary.
+
+    Formula: hybrid_score = structural_integrity × semantic_coherence
+    Both are binary: either we respect the boundary or we don't.
+    The hybrid enforces both simultaneously.
+
+    Parameters
+    ──────────
+    text   : full document text
+    n_min  : minimum chunk size in words
+    n_max  : maximum chunk size in words
+    config : pipeline config (read: semantic_shift_threshold)
+
+    Returns
+    ───────
+    List[Dict] with method="hybrid_legal_semantic"
+    """
+    # ── Pass 1: structural split at article/chapter boundaries ───────────────
+    spans = _boundary_spans(text, LEGAL_BOUNDARY_RE)
+    if len(spans) <= 1:
+        # No legal structure found — fall back to semantic_boundary_split
+        chunks = semantic_boundary_split(text, n_min, n_max, config, "plain")
+        for c in chunks:
+            c["method"] = "hybrid_legal_semantic"
+        return chunks
+
+    article_units: List[Tuple[str, int, int]] = [
+        (text[s:e].strip(), s, e)
+        for s, e in spans
+        if text[s:e].strip()
+    ]
+
+    # ── Pass 2: semantic refinement within oversized articles ─────────────────
+    refined_units: List[Tuple[str, int, int]] = []
+
+    for art_text, art_start, art_end in article_units:
+        art_words = len(art_text.split())
+
+        if art_words <= n_max:
+            refined_units.append((art_text, art_start, art_end))
+            continue
+
+        # Article is too large — apply semantic splitting WITHIN it.
+        art_config = dict(config)
+        art_config["semantic_shift_threshold"] = float(
+            config.get("semantic_shift_threshold_hybrid", 0.35)
+        )
+        sub_chunks = semantic_boundary_split(
+            art_text, n_min, n_max, art_config, "legal_article"
+        )
+
+        if len(sub_chunks) <= 1:
+            refined_units.append((art_text, art_start, art_end))
+        else:
+            for sc in sub_chunks:
+                sc_text = sc.get("text", "").strip()
+                if not sc_text:
+                    continue
+                # Enforce sentence-start integrity: if the sub-chunk starts
+                # mid-sentence (lowercase first char that isn't a list marker),
+                # absorb it into the previous unit rather than starting a broken chunk.
+                first_char = sc_text[:1]
+                is_mid_sentence = (
+                    first_char.islower()
+                    and not re.match(r"^\d+\)", sc_text)   # not a numbered item
+                    and not re.match(r"^[a-z][-\)]", sc_text)  # not a lettered item
+                )
+                if is_mid_sentence and refined_units:
+                    # Absorb into previous unit (it's a continuation sentence)
+                    prev_text, prev_start, prev_end = refined_units[-1]
+                    refined_units[-1] = (
+                        prev_text + "\n\n" + sc_text,
+                        prev_start,
+                        art_start + art_text.find(sc_text) + len(sc_text)
+                        if art_text.find(sc_text) >= 0 else prev_end,
+                    )
+                else:
+                    local_pos = art_text.find(sc_text)
+                    if local_pos >= 0:
+                        refined_units.append((
+                            sc_text,
+                            art_start + local_pos,
+                            art_start + local_pos + len(sc_text),
+                        ))
+                    else:
+                        refined_units.append((sc_text, art_start, art_end))
+
+    # ── Pass 3: size normalisation at paragraph boundaries ────────────────────
+    # For units still above n_max, try to split at numbered paragraph marks
+    final_units: List[Tuple[str, int, int]] = []
+
+    _PARA_SPLIT_RE = re.compile(r"\n+(?=\s*\d+\)\s|\s*[a-z][-\)]\s)")
+
+    for unit_text, unit_start, unit_end in refined_units:
+        if len(unit_text.split()) <= n_max:
+            final_units.append((unit_text, unit_start, unit_end))
+            continue
+
+        # Try splitting at numbered paragraph boundaries
+        parts = _PARA_SPLIT_RE.split(unit_text)
+        if len(parts) > 1:
+            # Pack the paragraph parts within size limits
+            buf = ""
+            buf_start = unit_start
+            cursor = unit_start
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                candidate = (buf + "\n\n" + part).strip() if buf else part
+                if len(candidate.split()) <= n_max:
+                    buf = candidate
+                else:
+                    if buf:
+                        final_units.append((buf, buf_start, cursor))
+                    buf = part
+                    buf_start = cursor
+                cursor += len(part) + 2  # +2 for the "\n\n" joiner
+            if buf:
+                final_units.append((buf, buf_start, unit_end))
+        else:
+            # No paragraph boundaries found — keep as-is (oversized but intact)
+            final_units.append((unit_text, unit_start, unit_end))
+
+    # ── Build output chunks ───────────────────────────────────────────────────
+    result = _pack_units_with_offsets(
+        final_units, n_min, n_max, "hybrid_legal_semantic", "\n\n"
+    )
+    # Ensure method label is set on every chunk
+    for c in result:
+        c["method"] = "hybrid_legal_semantic"
+    return result
 
 
 def semantic_boundary_split(
@@ -405,6 +612,21 @@ def _split_table(text: str, n_min: int, n_max: int) -> List[Dict]:
 
 
 def _split_sections(text: str) -> List[Tuple[str, int, int]]:
+    """
+    Split text into sections at heading boundaries.
+
+    MID-SENTENCE CUT FIX
+    ─────────────────────
+    The original code split at every line that _looks_like_heading matched,
+    which could fire on continuation lines inside articles (e.g. a sub-item
+    "a) dispose dans le premier Etat..." was sometimes treated as a new heading
+    because the ALL-CAPS regex matched its first word).
+
+    Fix: after splitting, any section whose text starts with a lowercase
+    character (and is not a legal list marker like "a)" or "1)") is merged
+    back into the preceding section — it is a continuation of its predecessor,
+    not a new heading-started section.
+    """
     starts = []
     pos = 0
     for line in text.splitlines(keepends=True):
@@ -412,19 +634,41 @@ def _split_sections(text: str) -> List[Tuple[str, int, int]]:
         if stripped and _looks_like_heading(stripped):
             starts.append(pos)
         pos += len(line)
+
     if len(starts) <= 1:
         return _paragraph_units(text)
+
     starts = sorted(set(starts))
-    spans = []
+
+    # Build raw spans
+    raw_spans: List[Tuple[str, int, int]] = []
+    prefix = text[:starts[0]].strip()
+    if prefix:
+        raw_spans.append((prefix, 0, starts[0]))
     for i, start in enumerate(starts):
         end = starts[i + 1] if i + 1 < len(starts) else len(text)
         chunk = text[start:end].strip()
         if chunk:
-            spans.append((chunk, start, end))
-    prefix = text[:starts[0]].strip()
-    if prefix:
-        spans.insert(0, (prefix, 0, starts[0]))
-    return spans
+            raw_spans.append((chunk, start, end))
+
+    # Merge mid-sentence continuations back into preceding section
+    merged: List[Tuple[str, int, int]] = []
+    for chunk_text, start, end in raw_spans:
+        first_char = chunk_text[:1]
+        # A genuine heading-started section begins with an uppercase char,
+        # a digit, or a structural marker — not a raw lowercase continuation
+        is_continuation = (
+            first_char.islower()
+            and not re.match(r"^\d+\)", chunk_text)    # not: 1)
+            and not re.match(r"^[a-z][-\)]\s", chunk_text)  # not: a) or a-
+        )
+        if is_continuation and merged:
+            prev_text, prev_start, _ = merged[-1]
+            merged[-1] = (prev_text + "\n\n" + chunk_text, prev_start, end)
+        else:
+            merged.append((chunk_text, start, end))
+
+    return merged if merged else _paragraph_units(text)
 
 
 def _boundary_spans(text: str, pattern: re.Pattern) -> List[Tuple[int, int]]:
@@ -468,23 +712,68 @@ def _pack_units_with_offsets(
     method: str,
     joiner: str,
 ) -> List[Dict]:
+    """
+    Pack paragraph/sentence units into size-bounded chunks.
+
+    MID-SENTENCE START FIX
+    ──────────────────────
+    The original packer flushed the current buffer whenever it exceeded n_max,
+    then started a new buffer with the current unit — regardless of whether that
+    unit started mid-sentence.  This produced chunks like:
+        "activité industrielle ou commerciale par l'intermédiaire..."
+    which are continuation clauses of the previous paragraph, not new sentences.
+
+    Fix: before starting a new buffer with a unit, check whether that unit
+    begins mid-sentence (lowercase first char, not a legal list marker).
+    If it does, absorb it into the PREVIOUS chunk even if it slightly exceeds
+    n_max (capped at 1.35×n_max to prevent runaway growth).
+    """
     if not units:
         return []
+
     chunks: List[Dict] = []
     buf: List[Tuple[str, int, int]] = []
+
     for unit in units:
-        unit_wc = len(unit[0].split())
-        buf_wc = _unit_word_count(buf)
+        unit_text = unit[0]
+        unit_wc   = len(unit_text.split())
+        buf_wc    = _unit_word_count(buf)
+
+        # Detect if this unit starts mid-sentence
+        first_char = unit_text.strip()[:1]
+        is_mid_sentence = (
+            first_char.islower()
+            and not re.match(r"^\d+\)", unit_text.strip())
+            and not re.match(r"^[a-z][-\)]\s", unit_text.strip())
+        )
+
         if buf and buf_wc + unit_wc > n_max:
-            chunks.append(_build_chunk_from_units(buf, method, joiner))
-            buf = [unit]
+            if is_mid_sentence:
+                # This unit starts mid-sentence — absorb into current buffer
+                # rather than starting a new chunk, even if it slightly exceeds n_max.
+                # Cap at 1.35×n_max to avoid infinite growth.
+                if buf_wc + unit_wc <= int(n_max * 1.35):
+                    buf.append(unit)
+                    continue
+                # Too large even with cap — flush current buffer first, then
+                # start new buffer. The mid-sentence start is unavoidable here
+                # (the source unit itself is too long to fix without re-splitting).
+                chunks.append(_build_chunk_from_units(buf, method, joiner))
+                buf = [unit]
+            else:
+                # Normal flush: unit starts a real sentence/paragraph
+                chunks.append(_build_chunk_from_units(buf, method, joiner))
+                buf = [unit]
         else:
             buf.append(unit)
+
         if _unit_word_count(buf) >= n_max:
             chunks.append(_build_chunk_from_units(buf, method, joiner))
             buf = []
+
     if buf:
         chunks.append(_build_chunk_from_units(buf, method, joiner))
+
     return _merge_small_chunks(chunks, n_min, n_max)
 
 

@@ -149,218 +149,360 @@ _DEPTH_MARKERS: List[Tuple[re.Pattern, int]] = [
 # ─────────────────────────────────────────────────────────────────────────────
 class PPLValidator:
     """
-    Manages PPL computation using a lightweight causal language model.
-    Lazy-loads on first use.  Singleton pattern prevents multiple model loads.
-    
-    Why DistilBERT (causal LM)?
-    ─────────────────────────────
-    - Lightweight: fast inference, low memory
-    - Pre-trained on diverse corpora: understands general coherence patterns
-    - Causal: left-to-right generation matches how humans read sequentially
-    - Perplexity = exp(cross_entropy): standard measure of language quality
+    Language-aware PPL validator using the correct causal LM per document language.
+
+    WHY THE ORIGINAL WAS BROKEN
+    ────────────────────────────
+    The original always loaded DistilGPT2, which was trained exclusively on
+    English WebText.  French tokens are heavily fragmented by its BPE tokenizer
+    (e.g. "établissement" → ["é", "tab", "liss", "ement"]), producing perplexity
+    values that reflect tokenization fragmentation rather than semantic coherence.
+    A coherent French sentence and an incoherent one get similarly high PPL
+    under DistilGPT2 → the validation signal was pure noise for French text.
+
+    THE FIX: LANGUAGE-AWARE MODEL SELECTION
+    ─────────────────────────────────────────
+    We maintain a mapping from ISO 639-1 language codes to the best available
+    lightweight causal LM for that language.  The document's language is
+    detected once (from the first call's text sample) and the right model is
+    loaded.  All subsequent calls reuse the cached model.
+
+    Model choices per language
+    ──────────────────────────
+    "en" → "distilgpt2"
+        Fast, 82M params, trained on English WebText.  PPL on English text
+        is a reliable coherence signal.
+
+    "fr" → "asi/gpt-fr-cased-small"
+        ~124M params, trained on French Common Crawl + Wikipedia.
+        Produces meaningful PPL on French legal/regulatory text.
+        Fallback: "bigscience/bloom-560m" (multilingual, larger but slower).
+
+    "ar" → "bigscience/bloom-560m"
+        BLOOM is the best open multilingual causal LM at this size.
+        Handles Arabic script natively.
+
+    "*"  → "bigscience/bloom-560m"
+        Universal fallback for any language not listed above.
+
+    Perplexity formula
+    ──────────────────
+    PPL(text) = exp( (1/N) × Σᵢ -log P(tᵢ | t₁…tᵢ₋₁) )
+
+    where N is the number of tokens and P is the model's conditional
+    probability.  Lower PPL = the model finds the text more predictable
+    = the text is more coherent under the language model's learned distribution.
+
+    Merge validation rule
+    ─────────────────────
+    Merge A+B is PPL-valid if:
+        PPL(A+B) < max(PPL(A), PPL(B)) × threshold
+
+    Intuition: if the merged text is MORE surprising to the model than both
+    parts individually, the merge created an incoherent combination.
+    threshold=1.1 allows a 10% PPL increase (small tolerance for joining
+    sentences that share few content words but are semantically related).
     """
-    
+
+    # Per-language model registry.
+    # Keys: ISO 639-1 codes.  Values: HuggingFace model IDs.
+    # Add entries here to support new languages without changing any other code.
+    _LANG_MODELS: Dict[str, str] = {
+        "en": "distilgpt2",                    # English — 82M, fast, reliable
+        "fr": "asi/gpt-fr-cased-small",        # French  — trained on FR corpora
+        "de": "dbmdz/german-gpt2",             # German
+        "es": "datificate/gpt2-small-spanish", # Spanish
+        "it": "GroNLP/gpt2-small-italian",     # Italian
+        "*":  "bigscience/bloom-560m",         # Universal multilingual fallback
+    }
+
+    # Singleton: one validator per process, models cached per language
     _instance: Optional['PPLValidator'] = None
-    
+
+    # Class-level flag: True only after preload() has been called and succeeded.
+    # Models are NEVER downloaded during a request — only during preload().
+    # If preload() was never called or failed, all validate_merge() calls
+    # return True immediately (rely on the lexical coherence gate instead).
+    _preloaded: bool = False
+
     def __init__(self):
-        self.model = None
-        self.tokenizer = None
+        # Cache: lang_code → (tokenizer, model) or None
+        self._models: Dict[str, Any] = {}
         self.device = "cpu"
-        self._loaded = False
-    
+        self._detected_lang: Optional[str] = None
+
+        try:
+            import torch
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            pass
+
     @classmethod
     def get_instance(cls) -> 'PPLValidator':
-        """Singleton accessor."""
+        """Singleton accessor — one validator per process."""
         if cls._instance is None:
             cls._instance = PPLValidator()
         return cls._instance
-    
-    def _load_model(self) -> bool:
+
+    @classmethod
+    def preload(cls, languages: Optional[List[str]] = None) -> None:
         """
-        Lazy-load the model and tokenizer.
-        Returns True if successful, False if transformers unavailable.
-        """
-        if self._loaded:
-            return True
-        
-        if not TRANSFORMERS_AVAILABLE:
-            return False
-        
-        try:
-            # Use DistilGPT2: lightweight causal LM, good for PPL computation
-            model_name = "distilgpt2"
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(model_name)
-            self.model.eval()  # set to evaluation mode (no dropout, etc)
-            
-            # Use GPU if available
-            try:
-                import torch
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
-                self.model.to(self.device)
-            except:
-                self.device = "cpu"
-            
-            self._loaded = True
-            return True
-        except Exception as e:
-            warnings.warn(f"Failed to load PPL model: {e}")
-            return False
-    
-    def compute_ppl(self, text: str) -> Optional[float]:
-        """
-        Compute perplexity of the given text.
-        
-        Perplexity = exp(cross_entropy_loss)
-        Lower perplexity = model finds the text more predictable/coherent.
-        
+        Pre-load language models at server startup — NEVER called during a request.
+
+        Call this once from your server startup code (e.g. FastAPI lifespan,
+        Gunicorn post_fork hook, or __main__ block) BEFORE accepting requests.
+        Model downloads happen here, not during request handling.
+
         Parameters
         ──────────
-        text : str
-            The text to evaluate. Should be at least a few tokens.
-        
-        Returns
-        ───────
-        Optional[float]
-            PPL value, or None if computation fails or model unavailable.
+        languages : list of ISO 639-1 codes to preload, e.g. ["fr", "en"].
+                    If None, defaults to ["fr", "en"] (most common use case).
+
+        Example server startup usage:
+            from s3_entropy import PPLValidator
+            PPLValidator.preload(["fr", "en"])   # called once at startup
+
+        If preload() is never called (e.g. development mode, CI), all
+        validate_merge() calls return True and the pipeline relies solely
+        on the lexical coherence gate — the pipeline still works correctly.
         """
-        if not self._load_model():
+        if not TRANSFORMERS_AVAILABLE:
+            return   # nothing to preload — transformers not installed
+
+        if languages is None:
+            languages = ["fr", "en"]
+
+        inst = cls.get_instance()
+        succeeded = False
+
+        for lang in languages:
+            result = inst._load_model_for_lang(lang)
+            if result is not None:
+                succeeded = True
+
+        # Only set _preloaded=True if at least one model loaded successfully.
+        # This prevents the request-time guard from being bypassed when all
+        # models failed to download (e.g. no internet access at startup).
+        if succeeded:
+            cls._preloaded = True
+
+    def _load_model_for_lang(self, lang: str) -> Optional[tuple]:
+        """
+        Internal: load and cache the model for one language code.
+
+        Called ONLY from preload() — never from request-handling code paths.
+        Downloads the model from HuggingFace Hub if not already cached.
+        Falls back to the universal "*" model if the language-specific one fails.
+
+        Returns (tokenizer, model) on success, None on failure.
+        """
+        if lang in self._models:
+            return self._models[lang]   # already loaded in this session
+
+        if not TRANSFORMERS_AVAILABLE:
+            self._models[lang] = None
             return None
-        
-        if not text or len(text.split()) < 3:
-            return None  # too short to evaluate
-        
+
+        model_id = self._LANG_MODELS.get(lang, self._LANG_MODELS["*"])
+        fallback_id = self._LANG_MODELS["*"]
+
+        for candidate in dict.fromkeys([model_id, fallback_id]):  # deduplicated
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(candidate)
+                model     = AutoModelForCausalLM.from_pretrained(candidate)
+                model.eval()
+                model.to(self.device)
+                self._models[lang] = (tokenizer, model)
+                return self._models[lang]
+            except Exception as exc:
+                warnings.warn(f"PPLValidator: failed to load {candidate}: {exc}")
+                continue
+
+        self._models[lang] = None
+        return None
+
+    def _get_model(self, lang: str) -> Optional[tuple]:
+        """
+        Request-time model lookup — NEVER downloads, only returns cached models.
+
+        If the model for this language was not preloaded, returns None immediately.
+        This guarantees zero network activity during request handling.
+        """
+        # Return from cache (populated by preload())
+        if lang in self._models:
+            return self._models[lang]
+
+        # Model not preloaded — return None, caller will skip PPL validation
+        # and rely on the lexical coherence gate (merge_coherence) alone.
+        return None
+
+    def _detect_lang(self, text: str) -> str:
+        """
+        Detect the language of the text.
+
+        Priority order:
+        1. langdetect (pip install langdetect) — probabilistic n-gram model
+        2. langid     (pip install langid)     — Naive Bayes classifier
+        3. Heuristic: French vs English function word counts (zero-dependency)
+
+        Result is cached after the first detection — we assume a document
+        is monolingual, so we only detect once per PPLValidator instance.
+        """
+        if self._detected_lang is not None:
+            return self._detected_lang
+
+        try:
+            from langdetect import detect  # type: ignore
+            lang = detect(text[:2000]).split("-")[0].lower()
+            self._detected_lang = lang
+            return lang
+        except Exception:
+            pass
+
+        try:
+            import langid  # type: ignore
+            lang, _ = langid.classify(text[:2000])
+            self._detected_lang = lang.lower()
+            return self._detected_lang
+        except Exception:
+            pass
+
+        # Zero-dependency heuristic
+        sample = text[:3000].lower()
+        words  = re.findall(r"\b\w+\b", sample)
+        fr_markers = {"le","la","les","de","des","du","et","en","dans",
+                      "pour","que","est","sur","par","avec","au","aux"}
+        en_markers = {"the","a","an","and","or","is","are","was","were",
+                      "have","has","will","would","this","that","with","from"}
+        fr_count = sum(1 for w in words if w in fr_markers)
+        en_count = sum(1 for w in words if w in en_markers)
+        self._detected_lang = "fr" if fr_count > en_count * 1.5 else "en"
+        return self._detected_lang
+
+    def compute_ppl(self, text: str, lang: Optional[str] = None) -> Optional[float]:
+        """
+        Compute perplexity of text under the language-appropriate causal LM.
+
+        PPL(text) = exp( (1/N) × Σᵢ −log P(tᵢ | t₁…tᵢ₋₁) )
+
+        Returns None immediately if:
+        - transformers/torch not installed
+        - preload() was never called (models not cached)
+        - text is too short (< 5 tokens)
+        - inference fails for any reason
+
+        None means "skip PPL — rely on lexical coherence gate".
+        """
+        # Guard 1: no models available at all
+        if not TRANSFORMERS_AVAILABLE or not PPLValidator._preloaded:
+            return None
+
+        if not text or len(text.split()) < 5:
+            return None
+
+        if lang is None:
+            lang = self._detect_lang(text)
+
+        # Guard 2: this language was not preloaded — no download attempt
+        pair = self._get_model(lang)
+        if pair is None:
+            return None
+
+        tokenizer, model = pair
         try:
             import torch
-            
-            # Tokenize
-            encodings = self.tokenizer(text, return_tensors="pt", max_length=512, truncation=True)
-            input_ids = encodings["input_ids"].to(self.device)
-            
-            # Forward pass to get logits
+            enc       = tokenizer(text, return_tensors="pt",
+                                  max_length=512, truncation=True)
+            input_ids = enc["input_ids"].to(self.device)
+
             with torch.no_grad():
-                outputs = self.model(input_ids)
-                logits = outputs.logits
-            
-            # Compute cross-entropy: shift targets by 1 (standard LM loss)
-            # We predict token i+1 from tokens 0..i
+                outputs = model(input_ids)
+                logits  = outputs.logits
+
             shift_logits = logits[:, :-1, :].contiguous()
             shift_labels = input_ids[:, 1:].contiguous()
-            
-            # Compute loss per token
-            loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
-            loss = loss_fn(
+            loss = torch.nn.CrossEntropyLoss(reduction="mean")(
                 shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1)
+                shift_labels.view(-1),
             )
-            
-            # Perplexity = exp(loss)
-            ppl = float(torch.exp(loss).cpu().numpy())
-            
-            # Clamp to reasonable range (handles edge cases)
-            return float(np.clip(ppl, 1.0, 10000.0))
-        
-        except Exception as e:
-            warnings.warn(f"PPL computation failed: {e}")
+            ppl = float(torch.exp(loss).cpu().item())
+            return float(np.clip(ppl, 1.0, 10_000.0))
+
+        except Exception as exc:
+            warnings.warn(f"PPL computation failed for lang={lang}: {exc}")
             return None
-    
-    def validate_merge(self, text_a: str, text_b: str, threshold: float = 1.1) -> bool:
+
+    def validate_merge(self, text_a: str, text_b: str,
+                       threshold: float = 1.1) -> bool:
         """
-        Validate that merging text_a and text_b actually improves coherence.
-        
-        Algorithm
-        ─────────
-        1. Get PPL of each chunk individually
-        2. Get PPL of merged chunk
-        3. Check: ppl_merged < max(ppl_a, ppl_b) * threshold
-        
-        Parameters
-        ──────────
-        text_a, text_b : str
-            Texts to potentially merge
-        threshold : float
-            Allowed PPL increase factor. Default 1.1 = allow 10% PPL increase
-            (strict validation: lower = more restrictive merge decisions)
-        
-        Returns
-        ───────
-        bool
-            True if merge is PPL-valid (merge should improve or maintain coherence)
-            False if merge would hurt coherence
+        Validate that merging text_a and text_b improves or preserves coherence.
+
+        Rule:  PPL(A+B) < max(PPL(A), PPL(B)) × threshold
+
+        Returns True immediately (allow merge) if:
+        - transformers not installed
+        - preload() was never called (safe fallback — lexical gate handles it)
+        - PPL computation fails for any reason
+
+        This means the method NEVER blocks, NEVER downloads, NEVER hangs.
         """
-        if not TRANSFORMERS_AVAILABLE:
-            return True  # no validation available, assume valid
-        
-        ppl_a = self.compute_ppl(text_a)
-        ppl_b = self.compute_ppl(text_b)
-        merged_text = text_a + "\n\n" + text_b
-        ppl_merged = self.compute_ppl(merged_text)
-        
-        # Require at least 2 of 3 computations to succeed
-        valid_ppls = sum(p is not None for p in [ppl_a, ppl_b, ppl_merged])
-        if valid_ppls < 2:
-            return True  # not enough data, assume valid
-        
-        # If only merged PPL is missing, still validate
-        if ppl_merged is not None:
-            max_individual_ppl = max(ppl_a or 1000, ppl_b or 1000)
-            return ppl_merged < max_individual_ppl * threshold
-        
-        # Fallback: if we can't compute merged PPL, allow merge
-        return True
+        # Fast path: no PPL available — let lexical coherence gate decide
+        if not TRANSFORMERS_AVAILABLE or not PPLValidator._preloaded:
+            return True
+
+        combined = text_a + " " + text_b
+        lang = self._detect_lang(combined)
+
+        ppl_a      = self.compute_ppl(text_a,               lang=lang)
+        ppl_b      = self.compute_ppl(text_b,               lang=lang)
+        ppl_merged = self.compute_ppl(text_a + "\n\n" + text_b, lang=lang)
+
+        if ppl_merged is None or (ppl_a is None and ppl_b is None):
+            return True   # not enough data — allow merge
+
+        max_individual = max(ppl_a or 0.0, ppl_b or 0.0)
+        if max_individual == 0.0:
+            return True
+
+        return ppl_merged < max_individual * threshold
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Entropy Rate Calculator (Intra-chunk coherence)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _compute_entropy_rate(text: str) -> float:
+def _compute_entropy_rate(text_a: str, text_b: str) -> float:
     """
-    Compute ENTROPY RATE: the average information per symbol across
-    consecutive sentence transitions within a chunk.
-    
-    Entropy Rate Intuition
-    ──────────────────────
-    If sentences within a chunk are tightly related (same paragraph/topic),
-    entropy rate is LOW: knowing sentence i, sentence i+1 is predictable.
-    
-    If sentences within a chunk are unrelated (different topics),
-    entropy rate is HIGH: sentences are independent, hard to predict.
-    
-    Use Case
-    ────────
-    - Detect poor merge candidates: if a "merged" chunk would have high
-      entropy rate, it suggests the original chunks shouldn't have been merged
-    - Evaluate chunk quality: high entropy rate within a chunk = coherence issue
-    
-    Computation
-    ───────────
-    1. Split text into sentences
-    2. Compute unigram distribution for each sentence
-    3. For each consecutive pair (sᵢ, sᵢ₊₁):
-       a. Compute Jensen-Shannon divergence (symmetric)
-       b. This measures how different the next sentence's vocab is
-    4. Entropy rate = mean JS divergence across all transitions
-    5. Normalize to [0,1] via min/max of KL divergence theoretical bounds
-    
-    Parameters
-    ──────────
-    text : str
-        The chunk text to analyze
-    
-    Returns
-    ───────
-    float ∈ [0,1]
-        Entropy rate, bounded in [0, 1].
-        0 (low) = sentences are similar/cohesive
-        1 (high) = sentences are diverse/incoherent
+    Compute ENTROPY RATE of the MERGED candidate (text_a + "\\n\\n" + text_b).
+
+    WHY THIS SIGNATURE CHANGED FROM v4
+    ────────────────────────────────────
+    The original _compute_entropy_rate(text: str) took a single argument and
+    was called as _compute_entropy_rate(text_b) — measuring the coherence of
+    chunk B alone.  This answered "is B internally coherent?" rather than
+    "would A+B together be coherent?", which is what a merge decision needs.
+
+    Fix: we concatenate A and B before computing the rate, so the metric
+    directly measures whether the MERGE would produce a coherent chunk.
+
+    Entropy Rate Definition
+    ───────────────────────
+    H = (1/(n-1)) × Σᵢ JSD(P(Sᵢ), P(Sᵢ₊₁))
+
+    where Sᵢ are the sentences of the merged text and P(Sᵢ) is the unigram
+    distribution of sentence i.
+
+    Returns float ∈ [0,1]:
+      0 = all consecutive sentences are topically similar (good merge)
+      1 = sentences jump across topics (bad merge — high entropy rate)
     """
-    # Split into sentences
+    # Compute on the merged candidate so we measure A+B coherence, not just B
+    text = text_a + "\n\n" + text_b
     sentences = _split_sentences(text)
-    
+
     if len(sentences) < 2:
         return 0.0  # single sentence: no rate to compute
-    
+
     # Compute unigram distributions for each sentence
     sentence_dists: List[Tuple[Dict[str, int], int]] = []
     for sent in sentences:
@@ -372,42 +514,35 @@ def _compute_entropy_rate(text: str) -> float:
             for t in tokens:
                 freq[t] = freq.get(t, 0) + 1
             sentence_dists.append((freq, len(tokens)))
-    
+
     # Build joint vocabulary across all sentences
     joint_vocab = set()
     for freq_dict, _ in sentence_dists:
         joint_vocab.update(freq_dict.keys())
-    
+
     if not joint_vocab:
-        return 0.0  # no vocabulary = no entropy rate
-    
+        return 0.0
+
     # Compute JSD for consecutive sentence pairs
     jsd_values: List[float] = []
     for i in range(len(sentence_dists) - 1):
         freq_curr, len_curr = sentence_dists[i]
         freq_next, len_next = sentence_dists[i + 1]
-        
+
         if not freq_curr or not freq_next:
-            jsd_values.append(0.5)  # neutral when either sentence is empty
+            jsd_values.append(0.5)
             continue
-        
-        # Convert frequencies to probability distributions
+
         p = np.array([freq_curr.get(w, 0) / len_curr for w in joint_vocab], dtype=np.float64)
         q = np.array([freq_next.get(w, 0) / len_next for w in joint_vocab], dtype=np.float64)
-        
-        # Compute Jensen-Shannon divergence (symmetric, stable)
         m = (p + q) / 2.0
         jsd = 0.5 * _kl(p, m) + 0.5 * _kl(q, m)
         jsd_values.append(float(np.clip(jsd, 0.0, 1.0)))
-    
+
     if not jsd_values:
         return 0.0
-    
-    # Entropy rate = mean JSD across transitions
-    # Already bounded in [0,1] from individual JSD values
-    entropy_rate = float(np.mean(jsd_values))
-    
-    return float(np.clip(entropy_rate, 0.0, 1.0))
+
+    return float(np.clip(np.mean(jsd_values), 0.0, 1.0))
 
 
 def _split_sentences(text: str, min_length: int = 3) -> List[str]:
@@ -826,11 +961,11 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
                     new_x    = np.array([
                         new_feat["jsd"],
                         new_feat["hellinger"],
-                        new_feat["entropy_rate"],  # NEW
+                        new_feat["entropy_rate"],  # now computed on merged candidate
                         new_feat["pmi_drop"],
                         new_feat["depth_change"],
                         new_feat["drift"],
-                        float(new_feat.get("ppl_valid", 1.0)),  # NEW
+                        float(new_feat.get("ppl_valid", 1.0)),
                     ], dtype=np.float32)
 
                     new_ls, new_lc = lstm.step(new_x)
@@ -912,13 +1047,16 @@ def _boundary_features(text_a: str, text_b: str) -> Dict[str, float]:
     """
     Compute the complete feature vector for one boundary.
     
-    Enhanced to include entropy_rate and ppl validity.
     All values guaranteed ∈ [0, 1].
+
+    entropy_rate is now computed on the MERGED CANDIDATE (text_a + text_b)
+    rather than text_b alone — this correctly measures whether the merge
+    would produce a coherent chunk, not just whether B is internally coherent.
     """
     return {
         "jsd":          _compute_jsd(text_a, text_b),
         "hellinger":    _compute_hellinger(text_a, text_b),
-        "entropy_rate": _compute_entropy_rate(text_b),  # NEW: intra-chunk rate of text_b
+        "entropy_rate": _compute_entropy_rate(text_a, text_b),  # FIXED: merged candidate
         "pmi_drop":     _compute_pmi_drop(text_a, text_b),
         "depth_change": _compute_depth_change(text_b),
         "drift":        _compute_drift(text_a, text_b),

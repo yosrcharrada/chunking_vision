@@ -62,14 +62,70 @@ DOMAIN_KEYWORDS: Dict[str, List[str]] = {
 
 
 DOMAIN_METRIC_WEIGHTS: Dict[str, Dict[str, float]] = {
-    "legal": {"RC": 0.30, "ICC": 0.20, "DCC": 0.20, "BI": 0.20, "SC": 0.10},
-    "medical": {"RC": 0.20, "ICC": 0.25, "DCC": 0.25, "BI": 0.15, "SC": 0.15},
-    "academic": {"RC": 0.30, "ICC": 0.20, "DCC": 0.25, "BI": 0.10, "SC": 0.15},
-    "financial": {"RC": 0.20, "ICC": 0.20, "DCC": 0.25, "BI": 0.20, "SC": 0.15},
-    "technical": {"RC": 0.15, "ICC": 0.25, "DCC": 0.25, "BI": 0.20, "SC": 0.15},
-    "narrative": {"RC": 0.05, "ICC": 0.30, "DCC": 0.30, "BI": 0.20, "SC": 0.15},
+    # ── Highly structured domains: RC dominates because structure IS the content ──
+    # Legal: articles, clauses, and numbered provisions are the primary unit.
+    # High RC weight because structural anchors (Article N, §, CHAPITRE) are
+    # perfectly reliable split points.  Low ICC because legal writing deliberately
+    # uses sparse cross-sentence vocabulary (definitions referenced by number).
+    "legal":        {"RC": 0.35, "ICC": 0.10, "DCC": 0.20, "BI": 0.25, "SC": 0.10},
+
+    # Regulatory: same logic as legal.  Compliance documents have explicit article
+    # numbering.  BI is weighted to detect extraction noise (scanned regulations).
+    "regulatory":   {"RC": 0.35, "ICC": 0.10, "DCC": 0.20, "BI": 0.25, "SC": 0.10},
+
+    # Policy: directive/guideline documents have headings and numbered items.
+    # Slightly more ICC weight than legal because policy prose is more narrative.
+    "policy":       {"RC": 0.30, "ICC": 0.15, "DCC": 0.20, "BI": 0.20, "SC": 0.15},
+
+    # ── Moderate structure domains ────────────────────────────────────────────
+    # Academic: abstract/methods/results/discussion structure.  High RC for
+    # section headers; high DCC because adjacent sections are thematically linked.
+    "academic":     {"RC": 0.30, "ICC": 0.15, "DCC": 0.25, "BI": 0.15, "SC": 0.15},
+
+    # Research: same as academic but heavier ICC (method descriptions are dense
+    # prose with strong sentence continuity within a section).
+    "research":     {"RC": 0.25, "ICC": 0.20, "DCC": 0.25, "BI": 0.15, "SC": 0.15},
+
+    # Medical: clinical reports have structured sections (Diagnosis, Treatment).
+    # Higher BI weight because OCR-scanned medical PDFs often have extraction noise.
+    "medical":      {"RC": 0.20, "ICC": 0.25, "DCC": 0.25, "BI": 0.20, "SC": 0.10},
+
+    # Financial: tables, figures, and section headings coexist with dense prose.
+    # SC is higher because irregular unit sizes hurt financial chunk usability.
+    "financial":    {"RC": 0.20, "ICC": 0.20, "DCC": 0.25, "BI": 0.20, "SC": 0.15},
+
+    # ── Technical / product domains ───────────────────────────────────────────
+    # Technical: API docs, architecture specs.  High ICC (procedure steps are
+    # tightly coupled).  High DCC (topics chain: concept → implementation → test).
+    "technical":    {"RC": 0.15, "ICC": 0.25, "DCC": 0.25, "BI": 0.20, "SC": 0.15},
+
+    # Cybersecurity: incident reports and threat briefs are dense, structured prose.
+    "cybersecurity":{"RC": 0.20, "ICC": 0.25, "DCC": 0.25, "BI": 0.15, "SC": 0.15},
+
+    # Product: roadmaps, backlogs — short items, high variance in unit size.
+    # High SC weight because very short items (user stories) need careful packing.
+    "product":      {"RC": 0.20, "ICC": 0.20, "DCC": 0.20, "BI": 0.15, "SC": 0.25},
+
+    # Operations: SLA documents, workflow guides — mixed table/prose.
+    "operations":   {"RC": 0.20, "ICC": 0.20, "DCC": 0.20, "BI": 0.20, "SC": 0.20},
+
+    # ── Unstructured / narrative domains ─────────────────────────────────────
+    # Narrative: fiction/reports without formal structure.  ICC and DCC dominate
+    # because story flow is the primary coherence signal.  RC minimal.
+    "narrative":    {"RC": 0.05, "ICC": 0.30, "DCC": 0.30, "BI": 0.20, "SC": 0.15},
+
+    # Marketing: campaign briefs — short, punchy, varied.  ICC moderate.
+    "marketing":    {"RC": 0.15, "ICC": 0.25, "DCC": 0.25, "BI": 0.15, "SC": 0.20},
+
+    # Education: course materials — structured headings + explanatory prose.
+    "education":    {"RC": 0.25, "ICC": 0.25, "DCC": 0.20, "BI": 0.15, "SC": 0.15},
+
+    # Scientific: lab reports, papers — hypothesis/evidence structure.
+    "scientific":   {"RC": 0.25, "ICC": 0.20, "DCC": 0.25, "BI": 0.15, "SC": 0.15},
 }
 
+# Fallback weights for any domain not explicitly listed above.
+# Equal weighting is the most neutral choice when we have no prior knowledge.
 DEFAULT_WEIGHTS = {"RC": 0.20, "ICC": 0.20, "DCC": 0.20, "BI": 0.20, "SC": 0.20}
 
 
@@ -566,37 +622,76 @@ def _suggest_hyperparams(
     metrics: Dict[str, float],
     config: Dict[str, Any],
 ) -> Dict[str, Any]:
+    """
+    Suggest starting hyperparameters for S2–S3 based on document characteristics.
+
+    These values are returned as suggested_config AND are written back into the
+    live config dict so that downstream stages (S2, S3, S4) actually use them
+    as defaults when the caller has not explicitly overridden a key.
+
+    Previously, the suggestion was purely informational — it was computed but
+    never propagated.  This caused S7 to start from the API default n_max=500
+    instead of the document-derived suggestion, wasting early BO trials.
+
+    Propagation rule: write into config[key] only if the key is not already
+    set by the user (same rule as warm-start in S7).  This preserves explicit
+    user overrides.
+    """
+    # Start from user-supplied values or sensible defaults
     n_min = int(config.get("n_min", 100))
     n_max = int(config.get("n_max", 500))
 
-    # Adjust for document length
+    # ── Adjust chunk size for document length ─────────────────────────────────
     if token_count < 1000:
+        # Short document: smaller chunks to avoid single-chunk output
         n_min = min(n_min, 50)
-        n_max = min(n_max, 200)
-    elif token_count > 10000:
+        n_max = min(n_max, 250)
+    elif token_count > 10_000:
+        # Long document: larger chunks are more practical for retrieval
         n_min = max(n_min, 150)
         n_max = max(n_max, 600)
 
-    # Code docs benefit from tighter chunks
+    # ── Doc-type adjustments ──────────────────────────────────────────────────
     if doc_type == "code":
+        # Code functions/classes are typically short; tight chunks preserve them
         n_min = max(30, n_min - 30)
         n_max = min(300, n_max)
+    elif doc_type == "table":
+        # Table rows should stay together; allow small minimum
+        n_min = max(15, n_min // 2)
 
-    # Adjust JSD thresholds based on measured coherence
-    tau_low = float(config.get("tau_jsd_low", 0.15))
+    # ── Adjust JSD thresholds based on measured coherence (ICC) ──────────────
+    tau_low  = float(config.get("tau_jsd_low",  0.15))
     tau_high = float(config.get("tau_jsd_high", 0.45))
+    rc  = metrics.get("RC",  0.5)
     icc = metrics.get("ICC", 0.5)
-    if icc > 0.6:
-        # High cohesion doc → be stricter about merging
+
+    if icc > 0.60:
+        # High sentence-level cohesion → raise the merge bar (be stricter)
         tau_low = max(0.08, tau_low - 0.05)
-    elif icc < 0.3:
-        # Low cohesion → merge less aggressively
+    elif icc < 0.30:
+        # Low cohesion → lower the merge bar (merge less aggressively)
         tau_low = min(0.25, tau_low + 0.05)
 
-    return {
-        "n_min": n_min,
-        "n_max": n_max,
-        "tau_jsd_low": round(tau_low, 3),
+    if rc > 0.80:
+        # Strong structure signal → tighten the hard-split threshold so that
+        # structural markers are captured more readily
+        tau_high = max(0.30, tau_high - 0.05)
+
+    # Build the suggestion dict
+    suggested = {
+        "n_min":        n_min,
+        "n_max":        n_max,
+        "tau_jsd_low":  round(tau_low,  3),
         "tau_jsd_high": round(tau_high, 3),
-        "tau_sem": float(config.get("tau_sem", 0.75)),
+        "tau_sem":      float(config.get("tau_sem", 0.75)),
     }
+
+    # ── Propagate into live config (only for keys the user did not set) ───────
+    # This ensures S2 and S3 use these values as starting defaults rather than
+    # ignoring the profiler's analysis entirely.
+    for key, val in suggested.items():
+        if key not in config:
+            config[key] = val
+
+    return suggested

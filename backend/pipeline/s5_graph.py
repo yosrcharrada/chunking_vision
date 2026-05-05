@@ -106,15 +106,29 @@ class KGStore:
             pass   # silently ignore corrupt file — start fresh
 
     def save(self) -> None:
-        """Persist the current state to kg_store.json."""
+        """
+        Persist the current state to kg_store.json.
+
+        Eviction policy
+        ───────────────
+        To prevent the store from growing unboundedly across thousands of
+        document runs, we cap the entity_chunk_index at _KG_MAX_TRIALS
+        entries per entity (keeping only the most recent chunk IDs).
+        Co-occurrence counts are NOT evicted — they accumulate as intended.
+        """
         try:
+            # Evict oldest chunk-index entries beyond the cap
+            evicted_index = {
+                ent: ids[-_KG_MAX_TRIALS:]
+                for ent, ids in self.entity_chunk_index.items()
+            }
             with open(self.path, "w", encoding="utf-8") as fh:
                 json.dump(
                     {
                         "cooccurrence": {
                             k: dict(v) for k, v in self.entity_cooccurrence.items()
                         },
-                        "chunk_index": dict(self.entity_chunk_index),
+                        "chunk_index": evicted_index,
                     },
                     fh,
                     ensure_ascii=False,
@@ -153,29 +167,130 @@ class KGStore:
 # Module-level KGStore singleton (loaded once, persists across the request lifetime)
 _kg_store = KGStore()
 
-# Module-level spaCy model cache (loaded once per process)
-_nlp = None
+
+# Supported spaCy model names per language code.
+# Add entries here to support additional languages without changing any other code.
+_SPACY_MODELS: Dict[str, str] = {
+    "en": "en_core_web_sm",   # English — newswire + web text
+    "fr": "fr_core_news_sm",  # French  — news + legal corpus
+    "de": "de_core_news_sm",  # German
+    "es": "es_core_news_sm",  # Spanish
+    "it": "it_core_news_sm",  # Italian
+    "ar": "ar_core_news_sm",  # Arabic  (if installed)
+}
+
+# Maximum number of entity co-occurrence records kept in KGStore.
+# Prevents unbounded disk growth across many document runs.
+_KG_MAX_TRIALS = 500
+
+# Per-language spaCy model cache: lang_code → loaded model (or None)
+_nlp_cache: Dict[str, Any] = {}
 
 
-def _get_nlp():
+def _detect_language(text: str) -> str:
     """
-    Lazy-load the spaCy NLP model.
+    Detect the primary language of the document text.
 
-    Uses en_core_web_sm by default.  For French legal documents, replace this
-    with fr_core_news_sm (requires: python -m spacy download fr_core_news_sm).
+    Strategy (priority order):
+    1. langdetect library (if installed) — probabilistic n-gram model.
+    2. langid library (if installed) — fast Naive Bayes classifier.
+    3. Heuristic: count French-specific function words vs English ones.
+       This covers the most common case (French legal documents) without
+       any external dependency.
 
-    Returns None if spaCy is not installed — triggers regex NER fallback.
+    Returns a 2-letter ISO 639-1 language code (e.g. "fr", "en", "de").
+    Defaults to "en" if detection fails.
     """
-    global _nlp
-    if _nlp is not None:
-        return _nlp   # already loaded
+    # ── Option 1: langdetect ─────────────────────────────────────────────────
+    try:
+        from langdetect import detect  # type: ignore
+        # Sample the first 2000 chars to keep it fast
+        lang = detect(text[:2000])
+        # langdetect returns codes like "fr", "en", "zh-cn" — normalise to 2-char
+        return lang.split("-")[0].lower()
+    except Exception:
+        pass
+
+    # ── Option 2: langid ─────────────────────────────────────────────────────
+    try:
+        import langid  # type: ignore
+        lang, _ = langid.classify(text[:2000])
+        return lang.lower()
+    except Exception:
+        pass
+
+    # ── Option 3: heuristic word-count approach ───────────────────────────────
+    # Count occurrences of high-frequency words that are unambiguous markers
+    # of their language.  We sample 5000 chars to keep the heuristic fast.
+    sample = text[:5000].lower()
+    words  = re.findall(r"\b\w+\b", sample)
+    word_set = set(words)
+
+    # French marker words (very high frequency in French, rare in English)
+    fr_markers = {"le","la","les","de","des","du","et","en","un","une",
+                  "dans","pour","que","est","sur","par","avec","au","aux",
+                  "cette","leur","leurs","dont","ainsi","également"}
+    # English marker words
+    en_markers = {"the","a","an","and","or","but","is","are","was","were",
+                  "have","has","had","will","would","could","should","may",
+                  "this","that","these","those","with","from","their","they"}
+
+    fr_count = sum(1 for w in words if w in fr_markers)
+    en_count = sum(1 for w in words if w in en_markers)
+
+    if fr_count > en_count * 1.5:
+        return "fr"
+    return "en"   # safe default
+
+
+def _get_nlp(text: str = ""):
+    """
+    Lazy-load the spaCy NLP model appropriate for the document's language.
+
+    Algorithm
+    ─────────
+    1. Detect the document language (see _detect_language).
+    2. Look up the matching spaCy model name in _SPACY_MODELS.
+    3. Try to load it; if unavailable, try the English fallback.
+    4. If all spaCy models fail, return None → triggers regex NER fallback.
+
+    Results are cached per language code so that multiple chunks from the
+    same document reuse the already-loaded model.
+
+    Raises
+    ──────
+    Never raises — always returns a model or None.
+    """
+    lang = _detect_language(text) if text else "en"
+    model_name = _SPACY_MODELS.get(lang, "en_core_web_sm")
+
+    # Return cached model if already loaded for this language
+    if lang in _nlp_cache:
+        return _nlp_cache[lang]
+
+    # Try to load the language-specific model
     try:
         import spacy  # noqa: E402
-        # Disable unused components to speed up NER-only usage
-        _nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger", "lemmatizer"])
+        nlp = spacy.load(model_name, disable=["parser", "tagger", "lemmatizer"])
+        _nlp_cache[lang] = nlp
+        return nlp
     except Exception:
-        _nlp = None   # spaCy unavailable — will use regex fallback
-    return _nlp
+        pass
+
+    # Fallback: try English model (widely installed)
+    if model_name != "en_core_web_sm":
+        try:
+            import spacy  # noqa: E402
+            nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger", "lemmatizer"])
+            _nlp_cache[lang] = nlp   # cache under the detected lang to avoid retrying
+            return nlp
+        except Exception:
+            pass
+
+    # No spaCy available — regex NER fallback will be used
+    _nlp_cache[lang] = None
+    return None
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -210,7 +325,14 @@ def enrich_graph(
 
     enriched = [dict(c) for c in chunks]
     job_id   = config.get("job_id", "unknown")   # used to build unique chunk IDs
-    nlp      = _get_nlp()
+
+    # Detect language from the full document text (passed via config) so we
+    # load the correct spaCy model.  Fall back to a sample of the first 3 chunks
+    # if the full text was not stored in config (keeps memory usage bounded).
+    full_text_sample = str(config.get("_full_text_sample", "")) or (
+        " ".join(c.get("text", "") for c in chunks[:3])
+    )
+    nlp = _get_nlp(full_text_sample)
 
     # ── Step 1 + 2 + 3: NER, linking, and relation extraction ────────────
     for i, chunk in enumerate(enriched):
@@ -536,25 +658,91 @@ def _graph_vector_for_chunk(
 
 def _regex_ner(text: str) -> List[Dict[str, str]]:
     """
-    Lightweight regex NER: matches Capitalised multi-word phrases (1–5 words).
-    Used when spaCy is not installed.
+    Language-aware regex NER fallback used when spaCy is not installed.
 
-    Filters out common English sentence-starters that would generate noise
-    (The, This, That, etc.).  Returns up to 30 unique entities labelled "ENTITY".
+    Matches Capitalised multi-word phrases (1–5 words) as generic ENTITYs.
+
+    The key problem with the original: in French (and most Romance languages),
+    ALL sentence-starters are capitalised, so naive Capitalised-phrase matching
+    produces enormous noise ("Sont", "Personnes", "Etat", "Lorsque", …).
+
+    Fix: we apply three filters before accepting an entity:
+      1. Minimum length: the phrase must be > 3 characters.
+      2. Blocklist: a union of English AND French common sentence-starters
+         and grammatical words that are never true named entities.
+      3. Position filter: if the match starts exactly at a sentence boundary
+         (preceded by ". " or newline), it is likely a sentence-starter
+         capitalised by grammar — skip it.
+
+    Returns up to 30 unique entities labelled "ENTITY".
     """
+    # Combined English + French false-positive sentence-starters and function words.
+    # These are words that appear capitalised in text but are never named entities.
+    _BLOCKLIST = {
+        # English
+        "The","This","That","These","Those","When","Where","What","Which",
+        "However","Therefore","Moreover","Furthermore","Although","Because",
+        "Since","While","Both","Each","Some","Many","Most","Such",
+        "Here","There","Thus","Hence","Also","But","And","Or","Yet",
+        # French sentence-starters and function words that get capitalised
+        "Les","Des","Une","Dans","Pour","Que","Est","Sur","Par","Avec",
+        "Aux","Cette","Leur","Leurs","Dont","Ainsi","Lorsque","Lorsqu",
+        "Sont","Ont","Peut","Doit","Doivent","Toute","Tout","Tous",
+        "Selon","Sous","Entre","Après","Avant","Sans","Même","Plus",
+        "Lors","Afin","Dont","Sauf","Quant","Comme","Bien","Soit",
+        "Seul","Seule","Seuls","Seules","Tel","Tels","Telle","Telles",
+        "Aucun","Aucune","Chaque","Plusieurs","Elles","Nous","Vous",
+        "Notamment","Respectivement","Également",
+        # French common nouns that appear capitalised in headings/article titles
+        # but are NOT named entities — they name legal concepts, not proper nouns
+        "Personnes","Personne","Revenus","Revenu","Impôts","Impôt",
+        "Résidents","Résident","Sociétés","Société","Bénéfices","Bénéfice",
+        "Dividendes","Dividende","Intérêts","Intérêt","Redevances","Redevance",
+        "Salaires","Salaire","Pensions","Pension","Rémunérations","Rémunération",
+        "Éléments","Élément","Définitions","Définition","Dispositions","Disposition",
+        "Entreprises","Entreprise","Établissements","Établissement","Services",
+        "Champ","Application","Objet","Portée","Effets","Entrée","Vigueur",
+        "Dénonciation","Ratification","Protocole","Annexe","Amendement",
+        # English legal common nouns capitalised in headings
+        "Persons","Person","Income","Taxes","Tax","Residents","Resident",
+        "Companies","Company","Dividends","Dividend","Interest","Royalties",
+        "Salaries","Salary","Pensions","Pension","Benefits","Benefit",
+        "Provisions","Provision","Definitions","Definition","Services","Service",
+        "Application","Object","Scope","Effects","Entry","Force","Termination",
+    }
+
     entities: List[Dict[str, str]] = []
 
-    for m in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4})\b", text):
-        word = m.group(1)
-        # Skip common false positives
-        if (len(word) > 3 and word not in
-                {"The", "This", "That", "These", "Those",
-                 "When", "Where", "What", "Which"}):
-            entities.append({"text": word, "label": "ENTITY"})
+    # Build a set of sentence-start character offsets to detect grammar capitals.
+    # A character is a sentence-start if preceded by ". ", "? ", "! ", or a newline.
+    sentence_starts: set = set()
+    for m in re.finditer(r"(?:^|(?<=[.!?\n])\s+)", text):
+        sentence_starts.add(m.end())
+
+    for m in re.finditer(r"\b([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-Ÿ][a-zà-ÿ]+){0,4})\b", text):
+        word   = m.group(1)
+        offset = m.start()
+
+        # Filter 1: minimum meaningful length
+        if len(word) <= 3:
+            continue
+
+        # Filter 2: blocklist of known non-entity words
+        first_token = word.split()[0]
+        if first_token in _BLOCKLIST:
+            continue
+
+        # Filter 3: sentence-start position with only one word → grammar capital
+        # (Multi-word capitalised phrases at sentence start are still kept because
+        # "European Union" or "Tunisian Republic" legitimately start sentences.)
+        if offset in sentence_starts and len(word.split()) == 1:
+            continue
+
+        entities.append({"text": word, "label": "ENTITY"})
 
     # Deduplicate by lowercase text
-    seen = set()
-    uniq = []
+    seen: set = set()
+    uniq: List[Dict[str, str]] = []
     for e in entities:
         key = e["text"].lower()
         if key not in seen:

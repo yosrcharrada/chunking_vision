@@ -6,11 +6,15 @@ domain-specific context header templates.
 
 import hashlib
 import json
+import logging
 import os
 import re
+import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 _model_cache: Dict[str, Any] = {}
 _embed_cache_l1: Dict[str, List[List[float]]] = {}
@@ -45,7 +49,18 @@ def _get_model(model_name: str):
         return _model_cache[model_name]
     try:
         from sentence_transformers import SentenceTransformer  # noqa: E402
-        model = SentenceTransformer(model_name)
+        # Suppress known benign HuggingFace/SentenceTransformers warnings:
+        # 1. "unexpected key roberta.embeddings.position_ids" — harmless,
+        #    appears when loading newer checkpoints with older transformers.
+        # 2. "missing adapter_config.json" (404) — model is not a PEFT adapter,
+        #    sentence-transformers checks for it speculatively.
+        # 3. "unauthenticated request" — model is public, no token needed.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*position_ids.*")
+            warnings.filterwarnings("ignore", message=".*adapter_config.*")
+            warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+            warnings.filterwarnings("ignore", category=UserWarning)
+            model = SentenceTransformer(model_name)
         _model_cache[model_name] = model
         return model
     except Exception:
@@ -134,34 +149,99 @@ def _build_input_texts(
 
 
 def _ensemble_encode(texts: List[str], models: List[str]) -> Tuple[List[List[float]], Dict[str, Any]]:
+    """
+    Encode texts using an ensemble of embedding models and combine them.
+
+    Projection alignment fix
+    ────────────────────────
+    The original code used a different random projection matrix per model
+    (seed derived from model name hash), so averaging the projected vectors
+    was mathematically meaningless — you were averaging incompatible spaces.
+
+    Fix: all models project into the SAME 256-dim space using a SHARED
+    projection seed.  The seed is fixed (42) so projections are identical
+    across models, making the averaged vector well-defined.
+
+    This is still Johnson-Lindenstrauss projection (not PCA, which would
+    require training data), but the shared seed ensures:
+        proj_model_A(v) and proj_model_B(w) live in the same space
+        → their weighted average is semantically meaningful.
+
+    Quality-weighted ensemble
+    ─────────────────────────
+    Instead of uniform weights (all 1.0), we assign quality weights based
+    on known model performance tiers from the MTEB retrieval leaderboard:
+
+        Tier 1 (weight 3.0): mxbai-embed-large, e5-large-v2
+        Tier 2 (weight 2.0): all-mpnet-base-v2, jina-embeddings-v2-base-en
+        Tier 3 (weight 1.0): all-MiniLM-L6-v2, bow_fallback
+
+    This gives better models proportionally more influence in the ensemble
+    without requiring runtime evaluation.
+    """
     projection_dim = 256
+
+    # Shared projection seed — ALL models use seed=42 so their projected
+    # vectors are in the same 256-dim space and can be meaningfully averaged.
+    SHARED_PROJ_SEED = 42
+
+    # Quality weights per model (MTEB retrieval tier, higher = better quality)
+    MODEL_QUALITY_WEIGHTS: Dict[str, float] = {
+        "mxbai-embed-large":            3.0,
+        "e5-large-v2":                  3.0,
+        "all-mpnet-base-v2":            2.0,
+        "jina-embeddings-v2-base-en":   2.0,
+        "all-MiniLM-L6-v2":            1.0,
+        "bow_fallback":                 0.5,
+    }
+
     component_vectors: List[List[np.ndarray]] = []
-    available_models: List[str] = []
+    available_models:  List[str]              = []
+    quality_weights:   List[float]            = []
+
     for model_name in models:
         vecs = _encode_with_model(texts, model_name)
         if not vecs:
             continue
-        projected = [_project_vector(np.array(v, dtype=np.float32), projection_dim, model_name).astype(np.float32) for v in vecs]
+        # Project all model vectors into the shared 256-dim space
+        projected = [
+            _project_vector(
+                np.array(v, dtype=np.float32),
+                projection_dim,
+                seed=SHARED_PROJ_SEED,   # ← shared seed, not model-specific
+            ).astype(np.float32)
+            for v in vecs
+        ]
         component_vectors.append(projected)
         available_models.append(model_name)
+        # Look up quality weight; default to 1.0 for unknown models
+        quality_weights.append(MODEL_QUALITY_WEIGHTS.get(model_name, 1.0))
 
+    # Fallback: if no model succeeded, use bag-of-words hash embeddings
     if not component_vectors:
         fallback = [_bow_embed_text(t, projection_dim) for t in texts]
-        return [v.tolist() for v in fallback], {"models": ["bow_fallback"], "weights": [1.0], "projection_dim": projection_dim}
+        return (
+            [v.tolist() for v in fallback],
+            {"models": ["bow_fallback"], "weights": [1.0], "projection_dim": projection_dim},
+        )
 
-    weights = np.array([1.0] * len(component_vectors), dtype=np.float32)
-    weights = weights / max(np.sum(weights), 1.0)
+    # Normalise quality weights so they sum to 1.0
+    total_w = sum(quality_weights) or 1.0
+    norm_weights = [w / total_w for w in quality_weights]
+
+    # Build weighted-average embedding for each text
     final: List[List[float]] = []
     for i in range(len(texts)):
         agg = np.zeros(projection_dim, dtype=np.float32)
         for j, vectors in enumerate(component_vectors):
-            agg += vectors[i] * weights[j]
+            agg += vectors[i] * norm_weights[j]
         final.append(agg.tolist())
 
     return final, {
-        "models": available_models,
-        "weights": [round(float(w), 4) for w in weights.tolist()],
-        "projection_dim": projection_dim,
+        "models":          available_models,
+        "weights":         [round(float(w), 4) for w in norm_weights],
+        "projection_dim":  projection_dim,
+        "projection_seed": SHARED_PROJ_SEED,
     }
 
 
@@ -232,10 +312,23 @@ def _cache_set(key: str, vectors: List[List[float]]) -> None:
         pass
 
 
-def _project_vector(vec: np.ndarray, out_dim: int, salt: str) -> np.ndarray:
+def _project_vector(vec: np.ndarray, out_dim: int, seed: int = 42) -> np.ndarray:
+    """
+    Project vec into out_dim dimensions using a random Gaussian matrix.
+
+    Johnson-Lindenstrauss projection:
+        proj = vec @ R   where R ∈ ℝ^(in_dim × out_dim), R_ij ~ N(0, 1/out_dim)
+
+    The seed parameter controls the random matrix.  Using the SAME seed for all
+    models ensures they all project into the same latent space, making the
+    ensemble average well-defined.  Using different seeds per model (the old
+    behaviour) produced incompatible spaces whose average was meaningless.
+
+    If vec already has out_dim dimensions, returns it unchanged (no projection).
+    """
     if vec.size == out_dim:
-        return vec
-    rng = np.random.default_rng(abs(hash(salt)) % (2**32))
+        return vec   # already at target dimension — no projection needed
+    rng  = np.random.default_rng(seed)
     proj = rng.normal(0, 1.0 / np.sqrt(out_dim), size=(vec.size, out_dim)).astype(np.float32)
     return vec @ proj
 

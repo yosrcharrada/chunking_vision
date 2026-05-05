@@ -46,6 +46,17 @@ from pipeline.s5_graph import enrich_graph, build_entity_graph_data
 from pipeline.s6_embedding import embed_chunks
 from pipeline.s7_rl import run_rl_loop
 
+# ── PPL pre-load (runs once at startup, never during a request) ───────────
+# Downloads and caches the language-appropriate causal LM for each language.
+# French docs → asi/gpt-fr-cased-small, English → distilgpt2.
+# If transformers/torch are not installed this is a safe no-op.
+import os
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+from pipeline.s3_entropy import PPLValidator
+PPLValidator.preload(["fr", "en"])
+
+
 # ── In-memory stores ──────────────────────────────────────────────────────
 doc_store: Dict[str, Dict] = {}   # document_id → {filename, content, …}
 job_store: Dict[str, Dict] = {}   # job_id      → {status, stage, progress, …}
@@ -57,7 +68,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "tau_jsd_low": 0.15,
     "tau_jsd_high": 0.45,
     "tau_sem": 0.75,
-    "max_iterations": 10,
+    "max_iterations": 30,
     "alpha": 0.4,
     "beta": 0.4,
     "lambda": 0.2,
