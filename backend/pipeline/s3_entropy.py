@@ -209,7 +209,7 @@ class PPLValidator:
     # Add entries here to support new languages without changing any other code.
     _LANG_MODELS: Dict[str, str] = {
         "en": "distilgpt2",                    # English — 82M, fast, reliable
-        "fr": "asi/gpt-fr-cased-small",        # French  — trained on FR corpora
+        "fr": "dbddv01/gpt2-french-small",        # French  — trained on FR corpora
         "de": "dbmdz/german-gpt2",             # German
         "es": "datificate/gpt2-small-spanish", # Spanish
         "it": "GroNLP/gpt2-small-italian",     # Italian
