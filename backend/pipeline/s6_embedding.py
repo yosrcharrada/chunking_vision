@@ -10,6 +10,16 @@ import logging
 import os
 import re
 import warnings
+
+# Suppress the "UNEXPECTED key: position_ids / masked_bias" warnings that
+# sentence-transformers emits when loading GPT-2 / RoBERTa / BERT checkpoints.
+# These are completely harmless — they appear because newer model formats include
+# keys that older architecture classes don't expect. The models load correctly.
+warnings.filterwarnings("ignore", message=".*position_ids.*")
+warnings.filterwarnings("ignore", message=".*masked_bias.*")
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np

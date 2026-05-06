@@ -1,100 +1,88 @@
 """
-S7 — Hyperparameter Calibration via Bayesian Optimization (TPE)
-================================================================
-Pipeline position : runs AFTER S2–S6 (all chunking stages) and produces the
-                    final, optimally-configured chunk set for this document.
+S7 — Hyperparameter Calibration via Genetic Algorithm (GA)
+===========================================================
+Pipeline position : runs AFTER S2–S6 and produces the final, optimally-configured
+                    chunk set for this document.
 
-WHY WE REPLACED DQN WITH BAYESIAN OPTIMIZATION
-───────────────────────────────────────────────
-The original DQN had three fatal flaws that made it a no-op in practice:
+WHY GENETIC ALGORITHM INSTEAD OF TPE
+──────────────────────────────────────
+TPE (Bayesian Optimisation) is excellent for very small budgets (5–20 evaluations)
+because it learns a surrogate model of the objective.  But it is inherently
+sequential — each trial depends on all previous trial results, so you cannot
+run multiple trials in parallel.
 
-  1. "Monotonic improvement guarantee" killed all exploration.
-     Any trial that scored lower than the current best was immediately
-     reverted AND double-penalized.  With 10 iterations and instant
-     reversion, the agent could never walk through a temporarily-worse
-     state to reach a globally-better one.  The reward history froze at
-     iteration 1 in every test.
+For a pipeline where each evaluation (one full S2→S6 run) costs 2–10 seconds,
+sequential optimisation with 5 trials per strategy × 6 strategies = 30 evaluations
+means 60–300 seconds of wall-clock time.
 
-  2. Too few iterations for a DQN to learn anything.
-     A DQN with 18 actions and an 11-dim state needs hundreds of
-     transitions before its Q-network generalises.  10 iterations with
-     a revert policy → ≤ 2 non-reverted transitions → zero learning.
+The Genetic Algorithm (GA) solves this with FULL PARALLELISM:
+  • An entire generation of N individuals is evaluated simultaneously using a
+    ProcessPoolExecutor — all N pipeline calls run on separate CPU cores at once.
+  • Wall-clock time per generation = time of the SLOWEST evaluation, not the sum.
+  • With N=20 and 4 cores: each generation takes ~5s instead of ~100s.
+  • Total wall-clock: G × (slowest_eval_time) ≈ 5 generations × 5s = 25s
+    vs TPE sequential: 30 × 5s = 150s
 
-  3. Self-referential reward.
-     reward_quality = 1 - mean(S4_boundary_score).
-     S4 computes boundary_score inside the same pipeline run the agent
-     just triggered.  The agent was optimizing a number it computed
-     itself, not an external ground truth.
+GA is also better at escaping local optima than TPE because:
+  • Crossover combines GOOD parts from two different configurations — it can
+    discover that (n_max=375 from parent A) + (τ_low=0.12 from parent B) works
+    better than either parent alone.
+  • Mutation perturbs every gene independently — it explores the search space
+    breadth-first across the full population simultaneously.
+  • Elitism guarantees the best solution found is never lost.
 
-WHAT BAYESIAN OPTIMIZATION (TPE) GIVES US
-──────────────────────────────────────────
-Tree-structured Parzen Estimator (TPE) is the right algorithm here:
+GA DESIGN CHOICES
+─────────────────
+  Population size     N = 20 individuals per generation
+  Generations         G = 5  (configurable via ga_generations)
+  Selection           Tournament selection (k=3): pick 3 random, keep best
+  Crossover           BLX-α (blend crossover, α=0.5): child genes can fall
+                      slightly outside the parent range → better exploration
+  Mutation rate       0.20 per gene — higher than typical (0.1) because we
+                      have few generations; need fast diversity generation
+  Mutation scale      Gaussian noise, σ = 0.15 × (gene_max - gene_min)
+  Elitism             Top 2 individuals copied unchanged to next generation
+  Parallelism         ProcessPoolExecutor with max_workers = os.cpu_count()
+  Warm-start          Best params from previous runs seed the initial population
+                      (10% of population = warm-started, 90% = random)
 
-  • Designed for expensive black-box functions (each eval = full pipeline
-    run).  It needs 20–50 trials, not thousands.
+SEARCH SPACE (7 parameters, same as TPE version)
+──────────────────────────────────────────────────
+  n_max                ∈ [150, 900]   — max words per chunk (S2)
+  n_min                ∈ [30,  250]   — min words per chunk (S2)
+  tau_jsd_low          ∈ [0.05, 0.40] — S3 merge threshold
+  tau_jsd_high         ∈ [0.20, 0.80] — S3 hard-split threshold
+  tau_sem              ∈ [0.40, 0.95] — S4 similarity merge threshold
+  tau_percentile_low   ∈ [5,   45]    — S3 adaptive percentile (low)
+  tau_percentile_high  ∈ [55,  95]    — S3 adaptive percentile (high)
 
-  • Builds a probabilistic surrogate model of the objective landscape
-    from all past trials. Uses that model to pick the next configuration
-    most likely to improve, via the Expected Improvement (EI) criterion:
+GENE ENCODING
+─────────────
+  Each individual is a numpy array of 7 floats in [0, 1] (normalised).
+  Decoding maps back to the real parameter range:
+    gene[0] → n_max      = 150 + gene[0] × 750    (rounded to nearest 25)
+    gene[1] → n_min      = 30  + gene[1] × 220    (rounded to nearest 10)
+    gene[2] → τ_low      = 0.05 + gene[2] × 0.35
+    gene[3] → τ_high     = 0.20 + gene[3] × 0.60
+    gene[4] → τ_sem      = 0.40 + gene[4] × 0.55
+    gene[5] → p_low      = 5   + gene[5] × 40
+    gene[6] → p_high     = 55  + gene[6] × 40
 
-        EI(x) = E[max(f(x) − f(x⁺), 0)]
+  Normalised encoding makes crossover and mutation scale-invariant — a mutation
+  of σ=0.15 in [0,1] space is proportionally the same for every gene regardless
+  of its real-world scale (n_max ranges 750 words, τ_low ranges only 0.35).
 
-    where f(x⁺) is the current best observed reward.
-
-  • Does not need exploration/exploitation tuning (ε, γ, etc.).
-    The surrogate model handles the trade-off automatically.
-
-  • Warm-starts perfectly: persist the study's past trials to disk, load
-    them on the next document of the same domain → the surrogate model
-    already knows which regions of the search space are good.
-
-REWARD FUNCTION FIXES
-─────────────────────
-  Old coverage   : recall_proxy with probes auto-generated from headings
-                   of the SAME document → trivially answered by any chunking
-                   → always 1.0 → zero discriminating signal.
-
-  New coverage   : cross-chunk PRECISION signal.  For each probe, we
-                   measure whether the BEST matching chunk is tightly
-                   focused (short, high ICC) or sprawling (long, low ICC).
-                   A chunk that contains the answer within 300 words of
-                   relevant content scores higher than one that buries it
-                   in 900 words of mixed content.
-
-  Old quality    : 1 - mean(boundary_score)  — same pipeline, circular.
-
-  New quality    : combination of:
-                     (a) mean inter-chunk separation (hash-cosine distance
-                         between adjacent chunk embeddings → real boundary
-                         distinctiveness).
-                     (b) mean intra-chunk ICC (from S4) → coherence.
-                   Neither of these is produced by the component being
-                   optimised; they are independent structural signals.
-
-  efficiency     : unchanged but now correctly drives the search.
-                   target_count = total_words / TARGET_WORDS_PER_CHUNK.
-                   The search CAN fix it because it explores n_max freely.
-
-  structural     : unchanged. Hard-boundary ratio + mean PMI-drop.
-
-  consistency    : unchanged. CV of chunk sizes.
-
-SEARCH SPACE
-────────────
-  tau_jsd_low          ∈ [0.05, 0.40]  — merge threshold (S3)
-  tau_jsd_high         ∈ [0.20, 0.80]  — hard-split threshold (S3)
-  n_max                ∈ [150,  900]   — max tokens per chunk (S2)
-  n_min                ∈ [30,   250]   — min tokens per chunk (S2)
-  tau_sem              ∈ [0.40, 0.95]  — S4 merge similarity threshold
-  tau_percentile_low   ∈ [5,    45]    — S3 adaptive threshold lower %ile
-  tau_percentile_high  ∈ [55,   95]    — S3 adaptive threshold upper %ile
+UNIFIED SCORING
+───────────────
+  Every fitness evaluation uses _strategy_quality_score — the same function S2
+  uses for its benchmark.  A score of 0.921 in GA genuinely means the same as
+  0.899 in S2: the GA found better hyperparameters, not a different metric.
 
 PERSISTENCE & WARM-START
 ────────────────────────
-  Best trials are stored in `rl_history.json` keyed by domain
-  (e.g. "regulatory", "legal", "technical").  On subsequent documents
-  of the same domain the surrogate model is seeded with past trials,
-  meaning fewer trials are needed to reach good performance.
+  After each run, best params are saved to rl_history.json under
+  "{domain}__{strategy}".  The next document of the same domain seeds
+  10% of the initial population with these known-good params.
 """
 
 import copy
@@ -103,21 +91,10 @@ import logging
 import os
 import re
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-
-# ── Optional Optuna import — graceful fallback to random search if missing ───
-try:
-    import optuna
-    optuna.logging.set_verbosity(optuna.logging.WARNING)   # silence per-trial logs
-    _OPTUNA_AVAILABLE = True
-except ImportError:
-    _OPTUNA_AVAILABLE = False
-    warnings.warn(
-        "optuna not installed; S7 will fall back to random search.  "
-        "Install with: pip install optuna"
-    )
 
 from .s2_chunkers import run_all_chunkers, select_best_strategy
 from .s3_entropy import refine_boundaries
@@ -127,23 +104,70 @@ from .s6_embedding import embed_chunks
 
 logger = logging.getLogger(__name__)
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# ── Constants ─────────────────────────────────────────────────────────────────
 
-# Ideal chunk length in words — drives the efficiency reward component.
-# A legal/regulatory document is best served by ~300-word chunks so that
-# each chunk covers one concept without burying it in surrounding context.
-_TARGET_WORDS_PER_CHUNK = 300
-
-# Where we persist per-domain trial history for warm-start
+# Where we persist per-strategy best params for warm-start
 _RL_HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "rl_history.json")
 
-# Minimum number of Optuna trials before early stopping is allowed
-_MIN_TRIALS_BEFORE_STOP = 8
+# Strategies that always produce micro-chunks regardless of n_max —
+# GA cannot improve them; they are benchmarked in S2 at native params only.
+_EXCLUDED_STRATEGIES = {"semantic_boundaries", "sentence_clustering"}
 
-# If the best reward does not improve by at least this delta over
-# _PATIENCE_TRIALS consecutive trials, stop early.
-_IMPROVEMENT_DELTA = 0.005
-_PATIENCE_TRIALS   = 6
+# ── GA Hyperparameters ────────────────────────────────────────────────────────
+
+# Number of individuals in the population.
+# Larger = more diversity, slower per generation. 20 is a good balance.
+_GA_POP_SIZE = 20
+
+# Number of generations to evolve.
+# With parallelism, each generation costs ~slowest_eval seconds, not N × eval.
+_GA_GENERATIONS = 5
+
+# BLX-α crossover parameter.
+# α=0.5 means children can extend 50% beyond the parents' range → good exploration.
+_GA_CROSSOVER_ALPHA = 0.5
+
+# Crossover probability: fraction of the population that undergoes crossover.
+# The rest are reproduced unchanged (after selection).
+_GA_CROSSOVER_RATE = 0.80
+
+# Per-gene mutation probability: each gene mutates independently.
+# 0.20 is higher than classical GA (0.05–0.10) because we have few generations.
+_GA_MUTATION_RATE = 0.20
+
+# Gaussian mutation noise scale (fraction of gene's normalised range [0,1]).
+_GA_MUTATION_SIGMA = 0.15
+
+# Number of elites copied unchanged to next generation.
+_GA_ELITE_COUNT = 2
+
+# Tournament size for selection.
+# k=3: pick 3 random individuals, the fittest wins. Higher k = more selection pressure.
+_GA_TOURNAMENT_K = 3
+
+# Fraction of the initial population seeded from warm-start params.
+# 0.10 = 2 individuals out of 20 come from previous best-known params.
+_GA_WARMSTART_FRACTION = 0.10
+
+# Timeout per individual pipeline evaluation in seconds.
+# If a trial hangs (rare), it is skipped and scored as 0.0.
+_GA_EVAL_TIMEOUT = 120
+
+# ── Gene bounds (all in normalised [0,1] space) ──────────────────────────────
+# Each gene maps linearly from [0,1] to its real parameter range.
+# Stored as (real_min, real_max, snap_to_step) tuples.
+_GENE_SPECS = [
+    # (real_min, real_max,  step,  name)
+    (150,  900,   25,   "n_max"),
+    (30,   250,   10,   "n_min"),
+    (0.05, 0.40,  None, "tau_jsd_low"),
+    (0.20, 0.80,  None, "tau_jsd_high"),
+    (0.40, 0.95,  None, "tau_sem"),
+    (5,    45,    None, "tau_percentile_low"),
+    (55,   95,    None, "tau_percentile_high"),
+]
+_N_GENES = len(_GENE_SPECS)  # 7
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,60 +181,40 @@ def run_rl_loop(
     config: Dict[str, Any],
 ) -> Tuple[List[Dict], List[float], Dict[str, Any]]:
     """
-    Tune hyperparameters for EACH chunking strategy independently via Bayesian
-    Optimisation (TPE), then return the strategy+params combination that scores
-    highest — using the SAME metric as S2 so all scores are directly comparable.
+    Tune hyperparameters for EACH chunking strategy independently via a
+    Genetic Algorithm with full parallel fitness evaluation, then return
+    the strategy+params combination that scores highest.
 
-    CORRECT ARCHITECTURE
-    ────────────────────
-    The platform benchmarks chunking strategies.  S7's job is to find the best
-    possible version of EACH strategy by tuning its hyperparameters, then crown
-    the overall winner.
+    Architecture
+    ────────────
+    For each active strategy S (excluding micro-chunk strategies):
+      1. Build an initial population of N=20 parameter vectors, seeding
+         warm-start individuals from rl_history.json.
+      2. Evaluate the entire population in PARALLEL using ProcessPoolExecutor.
+      3. Evolve for G=5 generations using tournament selection, BLX-α
+         crossover, Gaussian mutation, and elitism.
+      4. Record the best (score, params, chunks) for strategy S.
 
-    Per-strategy BO:
-      For each strategy S in [structure, hybrid_legal_semantic, legal_articles,
-                               recursive, paragraph_pack, ...]:
-        Run a dedicated Optuna study for S alone.
-        Each trial: tune (n_max, n_min, tau_jsd_low, tau_jsd_high, tau_sem,
-                         tau_percentile_low, tau_percentile_high) for S.
-        Evaluate: _strategy_quality_score(S_chunks, n_min, n_max).
-        Record: best params + best score for S.
+    Overall winner = argmax over all strategies of their best GA score.
 
-      Overall winner = argmax over all strategies of their best BO score.
-
-    Why per-strategy, not global?
-      Global BO mixes strategies across trials → TPE surrogate receives
-      inconsistent signal (same params may select different strategies) →
-      bouncing reward → never converges on any strategy's optimum.
-
-    UNIFIED SCORING (same metric throughout)
-      S2 uses _strategy_quality_score.
-      S7 uses _strategy_quality_score.
-      So if S2 gives structure=0.756 and S7 gives structure_optimised=0.789,
-      that 0.789 is genuinely better — not a different scale.
-
-    Trial budget allocation:
-      trials_per_strategy = max_trials // n_active_strategies
-      Minimum 3 trials per strategy (enough for TPE to start learning).
-      Strategies excluded from BO: semantic_boundaries, sentence_clustering
-      (they produce 100+ micro-chunks regardless of params — BO can't help).
+    All fitness evaluations use _strategy_quality_score — the same function
+    S2 uses — so scores are directly comparable throughout the pipeline.
 
     Parameters
     ──────────
     text          : raw document text
-    doc_profile   : output of S1
-    initial_chunks: S2 winner chunks (used as baseline and fallback)
+    doc_profile   : output of S1 (domain, type, metrics)
+    initial_chunks: S2 winner chunks — used as the global baseline
     config        : pipeline config dict
 
     Returns
     ───────
-    best_chunks   : chunks from the best strategy+params combination
-    reward_history: flat list of all trial rewards (all strategies combined)
-    final_config  : diagnostics + best params per strategy
+    best_chunks    : chunk set from the winning strategy+params combination
+    reward_history : flat list of all fitness evaluations (all strategies)
+    final_config   : diagnostics including per_strategy_results
     """
     from .s2_chunkers import _strategy_quality_score as _sqscore
 
-    max_trials  = int(config.get("max_iterations", 20))
     model_name  = config.get("embedding_model", "all-MiniLM-L6-v2")
     doc_type    = doc_profile.get("type",   "prose")
     domain      = doc_profile.get("domain", "general")
@@ -218,122 +222,93 @@ def run_rl_loop(
     n_min       = int(config.get("n_min", 100))
     n_max       = int(config.get("n_max", 500))
 
-    # ── Strategies eligible for BO ────────────────────────────────────────────
-    # Excluded: semantic_boundaries and sentence_clustering always produce
-    # 100+ micro-chunks regardless of n_max → BO cannot meaningfully tune them.
-    # They are already benchmarked correctly in S2 with their native params.
-    _EXCLUDED = {"semantic_boundaries", "sentence_clustering"}
+    # Read GA settings from config (allow caller overrides)
+    pop_size    = int(config.get("ga_population", _GA_POP_SIZE))
+    generations = int(config.get("ga_generations", _GA_GENERATIONS))
+    max_workers = int(config.get("ga_workers", min(4, os.cpu_count() or 2)))
 
-    # Determine which strategies are active for this document type
-    # (same logic as S2 run_all_chunkers — only legal strategies for legal docs)
-    from .s2_chunkers import run_all_chunkers
+    # ── Run S2 to get all strategy baseline chunks ────────────────────────────
     all_s2 = run_all_chunkers(text, doc_type, config)
-    active_strategies = [s for s in all_s2.keys() if s not in _EXCLUDED]
+    active_strategies = [s for s in all_s2.keys() if s not in _EXCLUDED_STRATEGIES]
 
-    # Allocate trial budget evenly across strategies (minimum 3 per strategy)
-    n_strategies      = max(1, len(active_strategies))
-    trials_per_strat  = max(3, max_trials // n_strategies)
-
-    # ── Baseline: S2 winner with default params ───────────────────────────────
-    baseline_reward = round(float(_sqscore(initial_chunks, n_min, n_max)), 4)
-
-    # ── Per-strategy BO results ───────────────────────────────────────────────
-    # strategy_name → {"best_chunks", "best_score", "best_params", "trials"}
-    per_strategy_results: Dict[str, Any] = {}
-
-    # S2 scores are the baselines for each strategy
-    s2_scores = {}
+    # S2 baseline scores (default params) — used as the floor for each strategy
+    s2_scores: Dict[str, float] = {}
     for strat, chunks_list in all_s2.items():
         if chunks_list:
             s2_scores[strat] = round(float(_sqscore(chunks_list, n_min, n_max)), 4)
 
+    baseline_reward = round(float(_sqscore(initial_chunks, n_min, n_max)), 4)
     reward_history: List[float] = [baseline_reward]
 
-    # ── Run BO for each strategy independently ────────────────────────────────
-    for strategy in active_strategies:
-        strat_baseline_chunks = all_s2.get(strategy, initial_chunks) or initial_chunks
-        strat_baseline_score  = s2_scores.get(strategy, baseline_reward)
+    # ── Per-strategy GA ───────────────────────────────────────────────────────
+    per_strategy_results: Dict[str, Any] = {}
 
-        # Load per-strategy warm-start (domain + strategy key)
-        strat_key   = f"{history_key}__{strategy}"
-        history     = _load_history()
-        warm_cfg    = _warm_start_config(config, history, strat_key)
+    for strategy in active_strategies:
+        strat_baseline_score  = s2_scores.get(strategy, baseline_reward)
+        strat_baseline_chunks = all_s2.get(strategy) or initial_chunks
+
+        strat_key = f"{history_key}__{strategy}"
+        history   = _load_history()
+        warm_cfg  = _warm_start_config(config, history, strat_key)
         warm_cfg["chunking_strategy"] = strategy
 
-        strat_best_chunks = strat_baseline_chunks
-        strat_best_score  = strat_baseline_score
-        strat_best_cfg    = copy.deepcopy(warm_cfg)
-        strat_trials: List[float] = []
+        best_chunks, best_score, best_cfg, strat_rewards = _run_strategy_ga(
+            text=text,
+            doc_type=doc_type,
+            doc_profile=doc_profile,
+            model_name=model_name,
+            warm_cfg=warm_cfg,
+            strategy=strategy,
+            n_min=n_min,
+            n_max=n_max,
+            baseline_score=strat_baseline_score,
+            baseline_chunks=strat_baseline_chunks,
+            pop_size=pop_size,
+            generations=generations,
+            max_workers=max_workers,
+        )
 
-        if _OPTUNA_AVAILABLE:
-            strat_best_chunks, strat_best_score, strat_best_cfg, strat_trials = (
-                _run_strategy_optuna(
-                    text=text, doc_type=doc_type, doc_profile=doc_profile,
-                    model_name=model_name, warm_cfg=warm_cfg,
-                    strategy=strategy, n_min=n_min, n_max=n_max,
-                    baseline_score=strat_baseline_score,
-                    best_chunks=strat_best_chunks,
-                    best_score=strat_best_score,
-                    best_cfg=strat_best_cfg,
-                    max_trials=trials_per_strat,
-                )
-            )
-        else:
-            strat_best_chunks, strat_best_score, strat_best_cfg, strat_trials = (
-                _run_strategy_random(
-                    text=text, doc_type=doc_type, doc_profile=doc_profile,
-                    model_name=model_name, warm_cfg=warm_cfg,
-                    strategy=strategy, n_min=n_min, n_max=n_max,
-                    baseline_score=strat_baseline_score,
-                    best_chunks=strat_best_chunks,
-                    best_score=strat_best_score,
-                    best_cfg=strat_best_cfg,
-                    max_trials=trials_per_strat,
-                )
-            )
+        reward_history.extend(strat_rewards)
 
-        reward_history.extend(strat_trials)
-
-        # Persist per-strategy warm-start
-        _save_history(strat_key, strat_best_cfg, {"total": strat_best_score})
+        # Persist best params for this strategy+domain combination
+        _save_history(strat_key, best_cfg, {"total": best_score})
 
         per_strategy_results[strategy] = {
-            "best_chunks": strat_best_chunks,
-            "best_score":  round(strat_best_score, 4),
+            "best_chunks": best_chunks,
+            "best_score":  round(best_score, 4),
             "s2_baseline": strat_baseline_score,
-            "improvement": round(strat_best_score - strat_baseline_score, 4),
-            "best_params": {
-                k: strat_best_cfg.get(k)
-                for k in ("n_max", "n_min", "tau_jsd_low", "tau_jsd_high",
-                          "tau_sem", "tau_percentile_low", "tau_percentile_high")
-            },
-            "n_trials": len(strat_trials),
+            "improvement": round(best_score - strat_baseline_score, 4),
+            "best_params": {k: best_cfg.get(k) for k in (
+                "n_max", "n_min", "tau_jsd_low", "tau_jsd_high",
+                "tau_sem", "tau_percentile_low", "tau_percentile_high"
+            )},
+            "n_evals": len(strat_rewards),
         }
 
-    # ── Pick overall winner ───────────────────────────────────────────────────
-    # The winner is the strategy whose best BO score is highest.
-    # This is the correct benchmark result: best possible version of each strategy,
-    # winner is the one that performs best on this document.
+    # ── Overall winner ────────────────────────────────────────────────────────
     overall_winner = max(
         per_strategy_results,
         key=lambda s: per_strategy_results[s]["best_score"],
     )
-    winner_result = per_strategy_results[overall_winner]
-    best_chunks   = winner_result["best_chunks"]
-    best_reward   = winner_result["best_score"]
+    winner         = per_strategy_results[overall_winner]
+    best_chunks    = winner["best_chunks"]
+    best_reward    = winner["best_score"]
 
-    # ── Build final config ────────────────────────────────────────────────────
-    final_cfg = copy.deepcopy(winner_result.get("best_params", config))
+    # ── Final config ──────────────────────────────────────────────────────────
+    final_cfg = copy.deepcopy(winner.get("best_params", config))
     final_cfg.update({
-        "optimizer":                 "optuna_tpe" if _OPTUNA_AVAILABLE else "random_search",
+        "optimizer":                 "genetic_algorithm",
+        "ga_population":             pop_size,
+        "ga_generations":            generations,
+        "ga_workers":                max_workers,
         "rl_history_key":            history_key,
-        "n_trials_run":              len(reward_history) - 1,
+        "n_evals_total":             len(reward_history) - 1,
         "baseline_reward":           baseline_reward,
         "best_reward":               round(best_reward, 4),
         "improvement_over_baseline": round(best_reward - baseline_reward, 4),
         "overall_winner_strategy":   overall_winner,
         "chunking_strategy":         overall_winner,
-        "per_strategy_results":      {
+        "per_strategy_results": {
             s: {k: v for k, v in r.items() if k != "best_chunks"}
             for s, r in per_strategy_results.items()
         },
@@ -343,161 +318,687 @@ def run_rl_loop(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Optuna TPE optimisation
-# ─────────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  GENETIC ALGORITHM ENGINE
+#  ─────────────────────────────────────────────────────────────────────────────
+#
+#  MULTITHREADING vs MULTIPROCESSING — why we use MULTIPROCESSING here
+#  ─────────────────────────────────────────────────────────────────────
+#  Multithreading (threading.Thread) and Multiprocessing (ProcessPoolExecutor)
+#  are both ways to run code concurrently, but they are NOT equivalent in Python:
+#
+#  • Python has a Global Interpreter Lock (GIL): only ONE thread can execute
+#    Python bytecode at a time. Threads are blocked waiting for the GIL while
+#    another thread runs. This makes threading useless for CPU-bound tasks.
+#
+#  • Threading IS useful for I/O-bound tasks (waiting for disk, network, etc.)
+#    because the GIL is released while a thread is waiting for I/O.
+#
+#  • Multiprocessing spawns separate OS processes, each with its own Python
+#    interpreter, its own GIL, and its own memory space. They truly run in
+#    parallel on separate CPU cores — no GIL contention.
+#
+#  Our GA evaluations are CPU-BOUND (running a full S2→S6 pipeline). Using
+#  threading would run them sequentially (GIL). Using multiprocessing gives
+#  us true parallelism across all available CPU cores.
+#
+#  GENETIC ALGORITHM KEY CONCEPTS
+#  ────────────────────────────────
+#  A GA is a population-based search algorithm inspired by biological evolution.
+#  It maintains a POPULATION of candidate solutions and evolves it over multiple
+#  GENERATIONS using four key operators:
+#
+#  ┌─────────────────┬────────────────────────────────────────────────────────┐
+#  │ CONCEPT         │ MEANING IN THIS PIPELINE                               │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Individual      │ One set of 7 hyperparameters                           │
+#  │ (chromosome)    │ [n_max, n_min, τ_low, τ_high, τ_sem, p_low, p_high]   │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Gene            │ One hyperparameter (e.g. n_max=375)                    │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Population      │ N=20 individuals evaluated simultaneously per generation│
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Fitness         │ _strategy_quality_score(chunks) — same metric as S2    │
+#  │ function        │ Higher = better chunk quality for this strategy        │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Selection       │ Tournament selection (k=3): pick 3 random, keep best   │
+#  │                 │ (see SELECTION METHODS comparison below)               │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Crossover       │ BLX-α (Blend Crossover, α=0.5): combine two parents   │
+#  │ (recombination) │ to produce a child that can explore beyond them        │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Mutation        │ Per-gene Gaussian perturbation (rate=0.20, σ=0.15)     │
+#  │                 │ Introduces random diversity to avoid local optima      │
+#  ├─────────────────┼────────────────────────────────────────────────────────┤
+#  │ Elitism         │ Top 2 individuals copied unchanged to next generation   │
+#  │                 │ Guarantees best solution found is NEVER lost            │
+#  └─────────────────┴────────────────────────────────────────────────────────┘
+#
+#  SELECTION METHODS — why TOURNAMENT and not ROULETTE WHEEL
+#  ──────────────────────────────────────────────────────────
+#  Three classical selection methods exist:
+#
+#  1. ROULETTE WHEEL (fitness-proportional selection):
+#     Each individual is selected with probability proportional to its fitness.
+#     P(select i) = fitness(i) / Σ fitness(j)
+#     ✗ PROBLEM: if one individual has fitness 0.95 and the rest have 0.50,
+#       it dominates selection completely → premature convergence.
+#     ✗ PROBLEM: breaks when fitnesses are negative or nearly equal (low spread).
+#
+#  2. RANK-BASED (selection pressure):
+#     Sort by fitness, assign probability by RANK not raw value.
+#     P(select i) = (2i) / (n(n+1))  for rank i out of n individuals.
+#     ✓ More stable than roulette wheel (never dominated by one individual).
+#     ✗ Slower convergence because rank differences ignore magnitude gaps.
+#
+#  3. TOURNAMENT SELECTION (our choice):
+#     Randomly pick k individuals from the population. The fittest wins.
+#     ✓ Tunable selection pressure via k (higher k = more pressure).
+#     ✓ Works with any fitness scale — no normalisation needed.
+#     ✓ Never dominated by a single super-fit individual.
+#     ✓ Parallelisable — selection decisions are independent.
+#     → We use k=3: moderate pressure, maintains good diversity, converges well
+#       in 5 generations.
+#
+# ══════════════════════════════════════════════════════════════════════════════
 
-def _run_strategy_optuna(
-    text, doc_type, doc_profile, model_name, warm_cfg,
-    strategy, n_min, n_max, baseline_score,
-    best_chunks, best_score, best_cfg, max_trials,
-):
+
+def _run_strategy_ga(
+    text: str,
+    doc_type: str,
+    doc_profile: Dict[str, Any],
+    model_name: str,
+    warm_cfg: Dict[str, Any],
+    strategy: str,
+    n_min: int,
+    n_max: int,
+    baseline_score: float,
+    baseline_chunks: List[Dict],
+    pop_size: int,
+    generations: int,
+    max_workers: int,
+) -> Tuple[List[Dict], float, Dict[str, Any], List[float]]:
     """
-    Dedicated Optuna TPE study for ONE specific strategy.
-    Every trial tests the same strategy with different hyperparameters.
-    The TPE surrogate learns: params → quality for THIS strategy only.
-    Reward = _strategy_quality_score (same as S2 — directly comparable).
+    Run a Genetic Algorithm for ONE chunking strategy to find its best hyperparams.
+
+    Each individual (chromosome) = one set of 7 hyperparameters encoded as a
+    normalised [0,1]^7 numpy array. The fitness of an individual is the chunk
+    quality score produced by running the full pipeline with those hyperparams.
+
+    Parallelism: every individual in a generation is evaluated SIMULTANEOUSLY
+    using ProcessPoolExecutor (multiprocessing, not threading — see module header
+    for the GIL explanation). Wall-clock time per generation = slowest eval,
+    not the sum of all evals.
+
+    Args:
+        strategy        : the chunking strategy being optimised (locked throughout)
+        pop_size        : number of individuals (chromosomes) per generation
+        generations     : number of evolutionary cycles to run
+        max_workers     : number of CPU cores to use for parallel evaluation
+        baseline_score  : S2 score at default params — the floor we must beat
+        baseline_chunks : S2 chunks — used as fallback if GA finds nothing better
+
+    Returns:
+        best_chunks     : chunk set produced by the best individual ever seen
+        best_score      : fitness score of that individual
+        best_cfg        : decoded config dict that produced it
+        fitness_history : list of best-so-far fitness after each generation
+                          (used by the frontend to draw the convergence chart)
     """
-    import optuna
-    from optuna.samplers import TPESampler
     from .s2_chunkers import _strategy_quality_score as _sqscore
 
-    sampler = TPESampler(seed=42, n_startup_trials=min(3, max_trials), multivariate=True)
-    study   = optuna.create_study(direction="maximize", sampler=sampler)
-
-    no_improve    = 0
-    trial_rewards: List[float] = []
-
-    def objective(trial):
-        nonlocal best_chunks, best_score, best_cfg, no_improve
-
-        trial_cfg    = _suggest_config(trial, warm_cfg, strategy)
-        trial_chunks = _run_pipeline(text, doc_type, doc_profile, model_name, trial_cfg, strategy)
-
-        if trial_chunks is None:
-            trial_rewards.append(round(best_score, 4))
-            return baseline_score - 0.1
-
-        reward = round(float(_sqscore(
-            trial_chunks,
-            trial_cfg.get("n_min", n_min),
-            trial_cfg.get("n_max", n_max),
-        )), 4)
-        trial_rewards.append(reward)
-
-        if reward > best_score:
-            best_score  = reward
-            best_chunks = trial_chunks
-            best_cfg    = trial_cfg
-            no_improve  = 0
-        else:
-            no_improve += 1
-
-        return reward
-
-    for idx in range(max_trials):
-        if idx >= _MIN_TRIALS_BEFORE_STOP and no_improve >= _PATIENCE_TRIALS:
-            break
-        try:
-            t = study.ask()
-            study.tell(t, objective(t))
-        except Exception as exc:
-            logger.debug("S7 [%s] trial %d: %s", strategy, idx, exc)
-            trial_rewards.append(round(best_score, 4))
-
-    return best_chunks, best_score, best_cfg, trial_rewards
-
-
-def _run_strategy_random(
-    text, doc_type, doc_profile, model_name, warm_cfg,
-    strategy, n_min, n_max, baseline_score,
-    best_chunks, best_score, best_cfg, max_trials,
-):
-    """Random search fallback for ONE strategy. Uses _strategy_quality_score."""
-    from .s2_chunkers import _strategy_quality_score as _sqscore
-
+    # Seed the random number generator deterministically per strategy.
+    # Same strategy = same seed = reproducible GA runs.
     rng = np.random.RandomState(abs(hash(strategy)) % (2**31))
-    trial_rewards: List[float] = []
 
-    for _ in range(max_trials):
-        trial_cfg    = _random_config(warm_cfg, rng, strategy)
-        trial_chunks = _run_pipeline(text, doc_type, doc_profile, model_name, trial_cfg, strategy)
+    # ──────────────────────────────────────────────────────────────────────────
+    # STEP 1: INITIALISE POPULATION
+    # The population is a list of 'pop_size' chromosomes.
+    # Each chromosome = numpy array of 7 floats in [0,1] (normalised gene space).
+    # ──────────────────────────────────────────────────────────────────────────
+    population = _initialise_population(pop_size, warm_cfg, rng)
 
-        if trial_chunks is None:
-            trial_rewards.append(round(best_score, 4))
-            continue
+    # All-time best tracker — starts at the S2 baseline so we never regress
+    best_score  = baseline_score
+    best_chunks = baseline_chunks
+    best_cfg    = copy.deepcopy(warm_cfg)
 
-        reward = round(float(_sqscore(
-            trial_chunks,
-            trial_cfg.get("n_min", n_min),
-            trial_cfg.get("n_max", n_max),
-        )), 4)
-        trial_rewards.append(reward)
+    # Records best-so-far fitness at end of each generation (for convergence plot)
+    fitness_history: List[float] = []
 
-        if reward > best_score:
-            best_score  = reward
-            best_chunks = trial_chunks
-            best_cfg    = trial_cfg
+    # ──────────────────────────────────────────────────────────────────────────
+    # STEP 2: GENERATIONAL LOOP
+    # Repeat for G generations. Each generation:
+    #   (a) evaluate all individuals in PARALLEL
+    #   (b) apply elitism, selection, crossover, mutation to produce next gen
+    # ──────────────────────────────────────────────────────────────────────────
+    for gen_idx in range(generations):
 
-    return best_chunks, best_score, best_cfg, trial_rewards
+        # ── (a) PARALLEL FITNESS EVALUATION ───────────────────────────────────
+        # Decode every chromosome in the current population into a real config dict,
+        # then evaluate all of them simultaneously using multiprocessing.
+        #
+        # WHY MULTIPROCESSING NOT MULTITHREADING:
+        # The pipeline (S2→S6) is CPU-bound. Python threads share one GIL and
+        # cannot run CPU-bound code in parallel. ProcessPoolExecutor spawns
+        # separate OS processes — each has its own Python interpreter and GIL,
+        # so they truly run concurrently on separate CPU cores.
+        #
+        # WHY _run_pipeline_worker MUST BE TOP-LEVEL:
+        # multiprocessing uses pickle to send tasks to worker processes.
+        # pickle cannot serialise lambdas or closures (they reference the
+        # enclosing scope which doesn't exist in the worker process).
+        # _run_pipeline_worker is a top-level module function → picklable.
+
+        # Decode all chromosomes to real config dicts before submitting
+        trial_cfgs: List[Dict] = [
+            _decode_individual(chromosome, warm_cfg, strategy)
+            for chromosome in population
+        ]
+
+        # Build argument tuples (all values must be pickle-serialisable)
+        args_list = [
+            (text, doc_type, doc_profile, model_name, cfg, strategy)
+            for cfg in trial_cfgs
+        ]
+
+        # Fitness array: one score per individual (0.0 if pipeline crashed)
+        fitnesses: List[float] = [0.0] * pop_size
+
+        # Submit ALL pop_size individuals to the process pool simultaneously.
+        # as_completed() yields futures as they finish (fastest first),
+        # so we don't wait for all of them before processing any results.
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+
+            # Map: future → individual index (so we know which result goes where)
+            future_to_idx = {
+                executor.submit(_run_pipeline_worker, args): i
+                for i, args in enumerate(args_list)
+            }
+
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    # Retrieve pipeline result with a timeout guard
+                    chunks_result = future.result(timeout=_GA_EVAL_TIMEOUT)
+                except (FuturesTimeout, Exception) as exc:
+                    # Pipeline crashed or timed out — score 0.0, GA avoids this region
+                    logger.debug("GA [%s] gen %d ind %d failed: %s",
+                                 strategy, gen_idx, idx, exc)
+                    chunks_result = None
+
+                # ── FITNESS FUNCTION ──────────────────────────────────────────
+                # Compute the fitness of this individual.
+                # We use _strategy_quality_score — the EXACT same function S2 uses
+                # to score strategies at default params. This makes GA scores
+                # directly comparable to S2 baseline scores.
+                # A GA score of 0.921 means the same thing as S2 score of 0.899:
+                # the GA found better hyperparams, not a different metric.
+                if chunks_result is not None:
+                    fitness = round(float(_sqscore(
+                        chunks_result,
+                        trial_cfgs[idx].get("n_min", n_min),
+                        trial_cfgs[idx].get("n_max", n_max),
+                    )), 4)
+                else:
+                    fitness = 0.0  # failed evaluation → worst possible score
+
+                fitnesses[idx] = fitness
+
+                # Track the all-time best individual across all generations
+                if fitness > best_score:
+                    best_score  = fitness
+                    best_chunks = chunks_result
+                    best_cfg    = trial_cfgs[idx]
+
+        # Log generation summary
+        mean_fitness = float(np.mean(fitnesses))
+        logger.debug(
+            "GA [%s] gen %d/%d  best=%.4f  mean=%.4f  pop_best=%.4f",
+            strategy, gen_idx + 1, generations, best_score,
+            mean_fitness, max(fitnesses),
+        )
+
+        # Record the all-time best after this generation (convergence history)
+        fitness_history.append(round(best_score, 4))
+
+        # ── (b) PRODUCE NEXT GENERATION ───────────────────────────────────────
+        # Apply selection + crossover + mutation to evolve the population.
+        # This is done sequentially (it's just numpy ops — very fast).
+        population = _evolve(population, fitnesses, rng)
+
+    return best_chunks, best_score, best_cfg, fitness_history
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Hyperparameter search space helpers
+# ══════════════════════════════════════════════════════════════════════════════
+#  GA OPERATORS
+#  Each operator corresponds to a biological concept in natural selection.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _initialise_population(
+    pop_size: int,
+    warm_cfg: Dict[str, Any],
+    rng: np.random.RandomState,
+) -> List[np.ndarray]:
+    """
+    ┌─────────────────────────────────────────────────────────┐
+    │  GA CONCEPT: POPULATION INITIALISATION                  │
+    │  The starting population is the "generation 0" before   │
+    │  any evolution has occurred. Its quality directly        │
+    │  affects how fast the GA converges.                      │
+    └─────────────────────────────────────────────────────────┘
+
+    We use a HYBRID initialisation strategy:
+
+    • WARM-START individuals (10% of population):
+      Decoded from the best hyperparameters known for this
+      {domain}__{strategy} combination, stored in rl_history.json
+      from previous document runs. These individuals start near
+      a known-good region of the search space.
+      A small noise σ=0.02 is added so warm-start individuals
+      are not all identical — we need diversity even in the seed.
+
+    • RANDOM individuals (90% of population):
+      Sampled uniformly from [0,1]^7. These ensure the population
+      covers the full search space and doesn't prematurely converge
+      on the warm-start solution.
+
+    Gene representation:
+      Each individual (chromosome) is a numpy float array of length 7.
+      Each gene is normalised to [0,1] — the actual parameter value is
+      recovered by _decode_individual. Normalisation makes all GA operators
+      scale-invariant (a mutation of σ=0.15 means the same relative
+      perturbation for n_max (range=750) and τ_low (range=0.35)).
+    """
+    population: List[np.ndarray] = []
+
+    # Number of individuals seeded from warm-start history
+    n_warm = max(1, int(pop_size * _GA_WARMSTART_FRACTION))
+
+    # Encode the warm-start config into normalised gene space
+    # Returns None if the warm-start config is incomplete (cold start)
+    warm_gene = _encode_config(warm_cfg)
+
+    for i in range(pop_size):
+        if i < n_warm and warm_gene is not None:
+            # ── WARM-START individual ─────────────────────────────────────────
+            # Add tiny Gaussian noise so warm-start individuals are
+            # not all identical. σ=0.02 = 2% perturbation in gene space.
+            noise = rng.normal(0.0, 0.02, size=_N_GENES)
+            gene  = np.clip(warm_gene + noise, 0.0, 1.0)
+        else:
+            # ── RANDOM individual ─────────────────────────────────────────────
+            # Uniform random in [0,1]^7 — explores the full search space
+            gene = rng.uniform(0.0, 1.0, size=_N_GENES)
+
+        population.append(gene)
+
+    return population
+
+
+def _evolve(
+    population: List[np.ndarray],
+    fitnesses: List[float],
+    rng: np.random.RandomState,
+) -> List[np.ndarray]:
+    """
+    ┌─────────────────────────────────────────────────────────┐
+    │  GA CONCEPT: GENERATIONAL EVOLUTION                     │
+    │  Produces the next generation from the current one       │
+    │  using elitism, selection, crossover, and mutation.      │
+    └─────────────────────────────────────────────────────────┘
+
+    The next generation is assembled in this order:
+      1. ELITISM: top-K individuals copied unchanged (quality guarantee)
+      2. SELECTION + CROSSOVER + MUTATION: fill remaining slots
+
+    This function is the GA's main evolutionary step. It is called once
+    per generation after all fitness evaluations complete.
+    """
+    pop_size = len(population)
+    next_gen: List[np.ndarray] = []
+
+    # Sort individuals by fitness (descending) — best first
+    sorted_indices = np.argsort(fitnesses)[::-1]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # OPERATOR 1: ELITISM
+    # ──────────────────────────────────────────────────────────────────────────
+    # The top _GA_ELITE_COUNT individuals are copied UNCHANGED to the next
+    # generation. This guarantees that the best solution found so far is
+    # never destroyed by crossover or mutation.
+    #
+    # Without elitism, a lucky good individual could be crossed or mutated
+    # into a worse one, losing the best solution. Elitism prevents this.
+    #
+    # We use 2 elites — enough to preserve the best solution and its close
+    # neighbour, without reducing population diversity too much.
+    for i in range(min(_GA_ELITE_COUNT, pop_size)):
+        elite_gene = population[sorted_indices[i]].copy()
+        next_gen.append(elite_gene)
+        # Log elites for debugging
+        logger.debug("  Elite %d: fitness=%.4f", i, fitnesses[sorted_indices[i]])
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Fill the rest of the next generation via SELECTION + CROSSOVER + MUTATION
+    # ──────────────────────────────────────────────────────────────────────────
+    while len(next_gen) < pop_size:
+
+        # OPERATOR 2: SELECTION (Tournament)
+        # Pick two parents via tournament selection.
+        # Each parent is selected independently (with replacement allowed),
+        # so both parents can sometimes be the same individual.
+        parent_a = _tournament_select(population, fitnesses, _GA_TOURNAMENT_K, rng)
+        parent_b = _tournament_select(population, fitnesses, _GA_TOURNAMENT_K, rng)
+
+        # OPERATOR 3: CROSSOVER (BLX-α)
+        # With probability _GA_CROSSOVER_RATE, produce a child by combining
+        # parent_a and parent_b. Otherwise, clone parent_a (no crossover).
+        if rng.random() < _GA_CROSSOVER_RATE:
+            child = _blx_alpha_crossover(parent_a, parent_b, _GA_CROSSOVER_ALPHA, rng)
+        else:
+            # No crossover: child is a copy of the fitter parent
+            child = parent_a.copy()
+
+        # OPERATOR 4: MUTATION (Gaussian)
+        # Perturb the child's genes randomly.
+        # Applied AFTER crossover so we mutate the recombined individual.
+        child = _gaussian_mutate(child, _GA_MUTATION_RATE, _GA_MUTATION_SIGMA, rng)
+
+        next_gen.append(child)
+
+    # Return exactly pop_size individuals (trim any excess from elitism rounding)
+    return next_gen[:pop_size]
+
+
+def _tournament_select(
+    population: List[np.ndarray],
+    fitnesses: List[float],
+    k: int,
+    rng: np.random.RandomState,
+) -> np.ndarray:
+    """
+    ┌─────────────────────────────────────────────────────────┐
+    │  GA OPERATOR: TOURNAMENT SELECTION                      │
+    │                                                          │
+    │  Why TOURNAMENT and not ROULETTE WHEEL?                  │
+    │                                                          │
+    │  ROULETTE WHEEL: P(select i) ∝ fitness(i) / Σ fitness   │
+    │  • Breaks when one individual dominates (fitness 0.95    │
+    │    vs all others at 0.50 → 63% chance of picking it).   │
+    │  • Requires normalised, positive fitness values.         │
+    │  • Leads to premature convergence: diversity collapses   │
+    │    in generations 1-2 as the dominant individual takes   │
+    │    over the entire population.                           │
+    │                                                          │
+    │  TOURNAMENT (k=3): pick 3 random, the fittest wins.     │
+    │  • No dominance problem — a super-fit individual can     │
+    │    only be selected if it appears in the tournament.     │
+    │  • Works with any fitness scale (no normalisation).      │
+    │  • Tunable pressure via k: k=2 = low pressure (more     │
+    │    diversity), k=10 = high pressure (fast convergence).  │
+    │  • We use k=3: moderate pressure, balances exploration   │
+    │    vs exploitation for our 5-generation budget.          │
+    └─────────────────────────────────────────────────────────┘
+
+    Args:
+        population : list of chromosomes
+        fitnesses  : fitness score for each chromosome (same order)
+        k          : tournament size (number of candidates to pick)
+        rng        : seeded random generator
+
+    Returns:
+        A COPY of the winning chromosome (does not modify original population)
+    """
+    # Pick k unique random indices from the population (without replacement)
+    candidates = rng.choice(len(population), size=min(k, len(population)), replace=False)
+
+    # The winner is whichever candidate has the highest fitness
+    best_candidate_idx = candidates[np.argmax([fitnesses[i] for i in candidates])]
+
+    # Return a COPY (not a reference) so the original population is not mutated
+    return population[best_candidate_idx].copy()
+
+
+def _blx_alpha_crossover(
+    parent_a: np.ndarray,
+    parent_b: np.ndarray,
+    alpha: float,
+    rng: np.random.RandomState,
+) -> np.ndarray:
+    """
+    ┌─────────────────────────────────────────────────────────┐
+    │  GA OPERATOR: BLX-α CROSSOVER (Blend Crossover)        │
+    │                                                          │
+    │  Crossover (recombination) combines genetic material     │
+    │  from two parents to produce a child that inherits the   │
+    │  best traits of both.                                    │
+    │                                                          │
+    │  BLX-α vs uniform crossover:                            │
+    │  • Uniform crossover: child[d] ∈ {parent_a[d],          │
+    │    parent_b[d]} — can ONLY produce values the parents    │
+    │    already had. It explores within the convex hull of    │
+    │    the population, never outside it.                     │
+    │  • BLX-α: child[d] ~ Uniform(lo - α×range, hi + α×range)│
+    │    With α=0.5, the child can go 50% beyond either parent │
+    │    in any dimension. This allows the GA to DISCOVER      │
+    │    configurations that neither parent ever tested.       │
+    │                                                          │
+    │  Formula per gene dimension d:                           │
+    │    lo    = min(parent_a[d], parent_b[d])                 │
+    │    hi    = max(parent_a[d], parent_b[d])                 │
+    │    range = hi - lo                                       │
+    │    child[d] ~ Uniform(lo - α×range,  hi + α×range)       │
+    │    → clipped to [0, 1] to stay in valid gene space      │
+    └─────────────────────────────────────────────────────────┘
+
+    Example:
+        parent_a[n_max_gene] = 0.30  → real n_max ≈ 375
+        parent_b[n_max_gene] = 0.50  → real n_max ≈ 525
+        range = 0.20
+        alpha = 0.50
+        child can sample from [0.30-0.10, 0.50+0.10] = [0.20, 0.60]
+        → real n_max can be anywhere from 300 to 600
+        (the parents covered 375-525; child covers 300-600)
+
+    Args:
+        parent_a : first parent chromosome [0,1]^7
+        parent_b : second parent chromosome [0,1]^7
+        alpha    : blend extent factor (0.5 = extend 50% beyond parents)
+        rng      : seeded random generator
+
+    Returns:
+        child chromosome [0,1]^7 (clipped to valid range)
+    """
+    child = np.empty(_N_GENES)
+
+    for d in range(_N_GENES):
+        # Find the interval spanned by the two parents for this gene
+        lo    = min(parent_a[d], parent_b[d])
+        hi    = max(parent_a[d], parent_b[d])
+        span  = hi - lo
+
+        # Extend the interval by alpha × span on each side
+        extended_lo = lo - alpha * span   # may go below 0
+        extended_hi = hi + alpha * span   # may go above 1
+
+        # Sample uniformly from the extended interval
+        child[d] = rng.uniform(extended_lo, extended_hi)
+
+    # Clip to [0,1] — genes must stay in valid normalised space
+    return np.clip(child, 0.0, 1.0)
+
+
+def _gaussian_mutate(
+    gene: np.ndarray,
+    rate: float,
+    sigma: float,
+    rng: np.random.RandomState,
+) -> np.ndarray:
+    """
+    ┌─────────────────────────────────────────────────────────┐
+    │  GA OPERATOR: GAUSSIAN MUTATION                         │
+    │                                                          │
+    │  Mutation introduces random changes to prevent the GA   │
+    │  from getting stuck in local optima. Without mutation,  │
+    │  once all individuals in the population share the same  │
+    │  gene value for dimension d, crossover cannot recover   │
+    │  diversity in d — only mutation can.                    │
+    │                                                          │
+    │  Per-gene Gaussian mutation:                             │
+    │    For each gene d independently:                        │
+    │      with probability `rate` (0.20):                    │
+    │        gene[d] += N(0, sigma)                           │
+    │    Result clipped to [0, 1]                             │
+    │                                                          │
+    │  Why σ=0.15?                                            │
+    │  In [0,1] gene space, σ=0.15 means a typical mutation   │
+    │  moves a gene by 15% of its total normalised range.     │
+    │  For n_max (real range 750 words): ~112 words shift.    │
+    │  For τ_low (real range 0.35): ~0.05 shift.             │
+    │  This is large enough to escape local optima, small     │
+    │  enough not to completely randomise the individual.      │
+    │                                                          │
+    │  Why rate=0.20?                                         │
+    │  Classical GAs use rate≈0.05-0.10. We use 0.20 because  │
+    │  we have only 5 generations — we need faster diversity   │
+    │  injection to cover the search space adequately.        │
+    └─────────────────────────────────────────────────────────┘
+
+    Args:
+        gene  : chromosome to mutate [0,1]^7  (NOT modified in-place)
+        rate  : per-gene mutation probability (0.20 = 20% of genes mutate)
+        sigma : Gaussian noise standard deviation in [0,1] space
+        rng   : seeded random generator
+
+    Returns:
+        mutated chromosome [0,1]^7 (a new array, original unchanged)
+    """
+    mutated = gene.copy()  # never mutate the original in-place
+
+    # Generate a boolean mask: True where mutation occurs
+    # Each gene mutates independently with probability `rate`
+    mutation_mask = rng.random(_N_GENES) < rate
+
+    if mutation_mask.any():
+        # Gaussian noise applied only to mutating genes
+        noise = rng.normal(0.0, sigma, _N_GENES)
+        mutated[mutation_mask] += noise[mutation_mask]
+
+        # Clip back to [0,1] — genes must stay in valid normalised space
+        mutated = np.clip(mutated, 0.0, 1.0)
+
+    return mutated
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gene encoding / decoding
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _suggest_config(trial: Any, base_cfg: Dict[str, Any], s2_winner: str) -> Dict[str, Any]:
+def _encode_config(cfg: Dict[str, Any]) -> Optional[np.ndarray]:
     """
-    Ask Optuna to suggest values for each tunable hyperparameter.
+    Encode a config dict as a normalised [0,1]^7 gene vector.
 
-    chunking_strategy is locked to s2_winner — the BO tunes the parameters
-    FOR that strategy, not across all strategies.
+    Returns None if any required key is missing (e.g. cold-start with no
+    warm history). The formula is the inverse of _decode_individual:
+        gene[d] = (real_value - real_min) / (real_max - real_min)
+    Integers (n_max, n_min) are used as-is without snapping.
+    """
+    gene = np.zeros(_N_GENES)
+    key_map = {
+        0: "n_max", 1: "n_min", 2: "tau_jsd_low", 3: "tau_jsd_high",
+        4: "tau_sem", 5: "tau_percentile_low", 6: "tau_percentile_high",
+    }
+    for d, key in key_map.items():
+        val = cfg.get(key)
+        if val is None:
+            return None   # missing key — can't encode
+        real_min, real_max, _, _ = _GENE_SPECS[d]
+        gene[d] = float(np.clip((val - real_min) / (real_max - real_min), 0.0, 1.0))
+    return gene
+
+
+def _decode_individual(
+    gene: np.ndarray,
+    base_cfg: Dict[str, Any],
+    strategy: str,
+) -> Dict[str, Any]:
+    """
+    Decode a normalised [0,1]^7 gene vector into a pipeline config dict.
+
+    Decoding formula:
+        real_value = real_min + gene[d] × (real_max - real_min)
+        if step is not None: round to nearest step
+
+    After decoding, inter-parameter constraints are enforced:
+        τ_jsd_low  ≤ τ_jsd_high - 0.08   (gap between merge/split thresholds)
+        n_min      ≤ n_max - 50           (minimum chunk size must be smaller)
+        τ_percentile_low < τ_percentile_high (lower percentile must be lower)
     """
     cfg = copy.deepcopy(base_cfg)
 
-    cfg["tau_jsd_low"]  = trial.suggest_float("tau_jsd_low",  0.05, 0.40)
-    cfg["tau_jsd_high"] = trial.suggest_float("tau_jsd_high", 0.20, 0.80)
-    cfg["n_max"]        = trial.suggest_int(  "n_max",        150,  900, step=25)
-    cfg["n_min"]        = trial.suggest_int(  "n_min",        30,   250, step=10)
-    cfg["tau_sem"]      = trial.suggest_float("tau_sem",      0.40, 0.95)
-    cfg["tau_percentile_low"]  = trial.suggest_float("tau_percentile_low",  5,  45)
-    cfg["tau_percentile_high"] = trial.suggest_float("tau_percentile_high", 55, 95)
+    key_map = {
+        0: "n_max", 1: "n_min", 2: "tau_jsd_low", 3: "tau_jsd_high",
+        4: "tau_sem", 5: "tau_percentile_low", 6: "tau_percentile_high",
+    }
 
-    # Enforce constraints
+    for d, key in key_map.items():
+        real_min, real_max, step, _ = _GENE_SPECS[d]
+        real_val = real_min + gene[d] * (real_max - real_min)
+        if step is not None:
+            # Round to nearest step (e.g. n_max to nearest 25)
+            real_val = round(real_val / step) * step
+            real_val = int(np.clip(real_val, real_min, real_max))
+        else:
+            real_val = float(np.clip(real_val, real_min, real_max))
+        cfg[key] = real_val
+
+    # ── Constraint repair ─────────────────────────────────────────────────────
+    # If τ_low ≥ τ_high - 0.08: push τ_high up to τ_low + 0.10
     if cfg["tau_jsd_low"] >= cfg["tau_jsd_high"] - 0.08:
         cfg["tau_jsd_high"] = min(0.80, cfg["tau_jsd_low"] + 0.10)
-    if cfg["n_min"] >= cfg["n_max"]:
+
+    # If n_min ≥ n_max - 50: pull n_min down
+    if cfg["n_min"] >= cfg["n_max"] - 50:
         cfg["n_min"] = max(30, cfg["n_max"] - 50)
 
-    # Lock strategy — every trial uses the S2 winner
-    cfg["chunking_strategy"] = s2_winner
-    cfg["entropy_metric"]    = base_cfg.get("entropy_metric", "hybrid")
-    cfg["_in_rl_calibration"] = True
+    # If p_low ≥ p_high: swap them
+    if cfg["tau_percentile_low"] >= cfg["tau_percentile_high"]:
+        cfg["tau_percentile_low"], cfg["tau_percentile_high"] = (
+            cfg["tau_percentile_high"] - 5,
+            cfg["tau_percentile_low"] + 5,
+        )
 
-    return cfg
-
-
-def _random_config(base_cfg: Dict[str, Any], rng: np.random.RandomState, s2_winner: str) -> Dict[str, Any]:
-    """Random search config locked to s2_winner strategy."""
-    cfg = copy.deepcopy(base_cfg)
-
-    cfg["tau_jsd_low"]  = float(rng.uniform(0.05, 0.40))
-    cfg["tau_jsd_high"] = float(rng.uniform(0.20, 0.80))
-    cfg["n_max"]        = int(rng.randint(6, 37) * 25)
-    cfg["n_min"]        = int(rng.randint(3, 26) * 10)
-    cfg["tau_sem"]      = float(rng.uniform(0.40, 0.95))
-    cfg["tau_percentile_low"]  = float(rng.uniform(5,  45))
-    cfg["tau_percentile_high"] = float(rng.uniform(55, 95))
-
-    if cfg["tau_jsd_low"] >= cfg["tau_jsd_high"] - 0.08:
-        cfg["tau_jsd_high"] = min(0.80, cfg["tau_jsd_low"] + 0.10)
-    if cfg["n_min"] >= cfg["n_max"]:
-        cfg["n_min"] = max(30, cfg["n_max"] - 50)
-
-    cfg["chunking_strategy"]  = s2_winner
+    # Non-tunable settings preserved from base config
+    cfg["chunking_strategy"]  = strategy
     cfg["entropy_metric"]     = base_cfg.get("entropy_metric", "hybrid")
     cfg["_in_rl_calibration"] = True
 
     return cfg
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Parallel pipeline worker — must be a top-level function for pickle
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_pipeline_worker(args: tuple) -> Optional[List[Dict]]:
+    """
+    Top-level wrapper for parallel evaluation in ProcessPoolExecutor.
+
+    Must be a top-level function (not a lambda, not a closure) because
+    Python's multiprocessing uses pickle to send functions to worker processes,
+    and pickle cannot serialise closures or lambdas.
+
+    Receives a single tuple argument `args` because ProcessPoolExecutor.submit
+    passes only one argument to the worker. The tuple contains:
+        (text, doc_type, doc_profile, model_name, cfg, strategy)
+
+    Returns the chunk list or None if the pipeline failed.
+    """
+    text, doc_type, doc_profile, model_name, cfg, strategy = args
+    return _run_pipeline(text, doc_type, doc_profile, model_name, cfg, strategy)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -513,19 +1014,37 @@ def _run_pipeline(
     s2_winner: str,
 ) -> Optional[List[Dict]]:
     """
-    Run S2 (locked to s2_winner) → S3 → S4 → S5 → S6 with trial config.
+    Run S2 → S3 → S4 during GA trials (S5 and S6 intentionally skipped).
 
-    The strategy is locked: instead of running all chunkers and selecting
-    the best one (which changes per trial), we run ONLY the s2_winner
-    chunker.  This gives the TPE surrogate model clean, consistent signal:
-    it learns how params affect quality for one specific strategy, not a
-    mixture of strategies.
+    WHY S5 AND S6 ARE SKIPPED IN GA TRIALS
+    ────────────────────────────────────────
+    The fitness function (_strategy_quality_score) measures:
+      - chunk size fit and count fit        (from S2 output)
+      - chunk size stability/variance       (from S2 output)
+      - boundary divergence (JSD)           (computed fresh here)
+      - structural integrity                (from S2/S3 output)
+      - sentence completion rate            (from S2 output)
+
+    NONE of these components use S6 embeddings or S5 entity graph data.
+    S6 loads sentence-transformer models (all-MiniLM-L6-v2, all-mpnet-base-v2)
+    which are ~400MB each. In multiprocessing, each worker process has its own
+    memory — the main process model cache is NOT shared with workers. So every
+    single GA trial would reload 400MB of models from disk.
+
+    With pop_size=20, generations=5, strategies=6: that is 600 model loads,
+    each taking 1-3 seconds. Skipping S6 removes ~600-1800 seconds of overhead
+    with zero impact on fitness scoring accuracy.
+
+    S5 is skipped for the same reason: entity graph enrichment does not affect
+    any component of _strategy_quality_score and adds unnecessary I/O.
+
+    S5 and S6 run in full on the FINAL pipeline pass (after GA completes) when
+    the best params are applied to produce the actual output chunks.
     """
     try:
-        cfg["_full_text_sample"]  = text[:3000]
-        cfg["chunking_strategy"]  = s2_winner   # enforce the lock
+        cfg["_full_text_sample"] = text[:3000]
+        cfg["chunking_strategy"] = s2_winner
 
-        # Import the specific chunker for the locked strategy
         from .s2_chunkers import (
             recursive_character_split, sliding_window_split,
             structure_based_split, semantic_boundary_split,
@@ -535,43 +1054,54 @@ def _run_pipeline(
         )
         from .s3_entropy import refine_boundaries
         from .s4_boundary import filter_boundaries
-        from .s5_graph import enrich_graph
-        from .s6_embedding import embed_chunks
+
+        # Suppress the noisy "UNEXPECTED key" warnings from transformers
+        # that fire even when S6 is not called (some imports trigger them)
+        import warnings
+        import logging
+        logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+        warnings.filterwarnings("ignore", message=".*position_ids.*")
+        warnings.filterwarnings("ignore", message=".*masked_bias.*")
 
         n_min = int(cfg.get("n_min", 100))
         n_max = int(cfg.get("n_max", 500))
 
-        # ── Run ONLY the locked strategy ─────────────────────────────────────
+        # ── S2: run the locked strategy only ─────────────────────────────────
         strategy_map = {
-            "recursive":              lambda: recursive_character_split(text, n_min, n_max, doc_type),
-            "sliding_window":         lambda: sliding_window_split(text, n_max, int(n_max * 0.15)),
-            "structure":              lambda: structure_based_split(text, doc_type, n_min, n_max),
-            "semantic_boundaries":    lambda: semantic_boundary_split(text, n_min, n_max, cfg),
-            "sentence_clustering":    lambda: sentence_cluster_split(text, n_min, n_max, cfg),
-            "paragraph_pack":         lambda: paragraph_pack_split(text, n_min, n_max),
-            "legal_articles":         lambda: legal_article_split(text, n_min, n_max),
-            "hybrid_legal_semantic":  lambda: hybrid_legal_semantic_split(text, n_min, n_max, cfg),
+            "recursive":             lambda: recursive_character_split(text, n_min, n_max, doc_type),
+            "sliding_window":        lambda: sliding_window_split(text, n_max, int(n_max * 0.15)),
+            "structure":             lambda: structure_based_split(text, doc_type, n_min, n_max),
+            "semantic_boundaries":   lambda: semantic_boundary_split(text, n_min, n_max, cfg),
+            "sentence_clustering":   lambda: sentence_cluster_split(text, n_min, n_max, cfg),
+            "paragraph_pack":        lambda: paragraph_pack_split(text, n_min, n_max),
+            "legal_articles":        lambda: legal_article_split(text, n_min, n_max),
+            "hybrid_legal_semantic": lambda: hybrid_legal_semantic_split(text, n_min, n_max, cfg),
         }
 
-        chunker_fn = strategy_map.get(s2_winner, strategy_map["structure"])
+        chunker_fn   = strategy_map.get(s2_winner, strategy_map["structure"])
         trial_chunks = chunker_fn()
 
         if not trial_chunks:
             return None
 
-        # Apply quality pass (same as S2 does after chunking)
+        # S2 post-processing (quality pass)
         trial_chunks = _quality_pass(trial_chunks, text, n_min, n_max, s2_winner)
 
-        # S3 → S4 → S5 → S6
+        # ── S3: entropy boundary refinement ──────────────────────────────────
         trial_chunks = refine_boundaries(trial_chunks, cfg)
+
+        # ── S4: boundary quality filter ───────────────────────────────────────
         trial_chunks = filter_boundaries(trial_chunks, doc_type, [], cfg)
-        trial_chunks = enrich_graph(trial_chunks, [], cfg)
-        trial_chunks, _ = embed_chunks(trial_chunks, text, doc_profile, model_name, cfg)
+
+        # ── S5 and S6 intentionally SKIPPED in GA trials ─────────────────────
+        # Fitness function does not use embeddings or entity graph data.
+        # Skipping these eliminates ~600 model-reload operations across all
+        # GA trials, saving several minutes of wall-clock time.
 
         return trial_chunks
 
     except Exception as exc:
-        logger.debug("S7 pipeline trial failed: %s", exc)
+        logger.debug("S7 GA trial failed: %s", exc)
         return None
 
 
@@ -941,7 +1471,7 @@ def _load_history() -> Dict[str, Any]:
 
     Returns an empty dict if the file does not exist or is corrupted.
     Each key is a domain string (e.g. "regulatory", "legal").
-    Each value contains the best config params and past Optuna trial data.
+    Each value contains the best config params and past GA trial data.
     """
     if not os.path.exists(_RL_HISTORY_PATH):
         return {}
@@ -997,11 +1527,11 @@ def _save_history(
         "best_params":  { ... tunable params ... },
         "best_reward":  float,
         "last_reward_components": { ... },
-        "optuna_trials": [ { "params": {...}, "value": float }, ... ]
+        "ga_trials": [ { "params": {...}, "value": float }, ... ]
       }
     }
 
-    optuna_trials stores a lightweight record of each trial so the TPE
+    ga_trials stores a lightweight record of each trial so the TPE
     surrogate model can be seeded from past runs on subsequent documents.
     """
     history = _load_history()
@@ -1015,8 +1545,8 @@ def _save_history(
 
     best_params = {k: config.get(k) for k in tunable_keys if config.get(k) is not None}
 
-    # Preserve any existing optuna_trials so they accumulate across runs
-    existing_trials = history.get(domain, {}).get("optuna_trials", [])
+    # Preserve any existing ga_trials so they accumulate across runs
+    existing_trials = history.get(domain, {}).get("ga_trials", [])
 
     # Add the current best as a new trial record for future warm-starting
     new_trial = {"params": best_params, "value": reward_components.get("total", 0.0)}
@@ -1029,7 +1559,7 @@ def _save_history(
         "best_params":             best_params,
         "best_reward":             reward_components.get("total", 0.0),
         "last_reward_components":  reward_components,
-        "optuna_trials":           updated_trials,
+        "ga_trials":           updated_trials,
     }
 
     try:

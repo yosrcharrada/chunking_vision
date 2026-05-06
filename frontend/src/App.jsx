@@ -17,7 +17,7 @@ const DEFAULT_CONFIG = {
   tau_percentile_low: 25,
   tau_percentile_high: 75,
   tau_sem: 0.75,
-  max_iterations: 10,
+  max_iterations: 30,
   alpha: 0.4,
   beta: 0.4,
   lambda: 0.2,
