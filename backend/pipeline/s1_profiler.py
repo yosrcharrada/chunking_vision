@@ -201,18 +201,62 @@ def _classify_type(text: str) -> str:
 
 
 def _classify_domain(text: str, config: Dict[str, Any]) -> Tuple[str, Dict[str, int]]:
+    """
+    Classify the document domain by keyword frequency.
+
+    TIE-BREAKING RULE
+    ─────────────────
+    When multiple domains score within 20% of the top score, we use a
+    priority ordering to pick the most specific one.  This matters for
+    documents like tax conventions, which score high on both "financial"
+    (revenue, profit, equity...) and "regulatory"/"legal" (statute, clause,
+    jurisdiction...).  A tax convention IS a legal instrument — "regulatory"
+    or "legal" is more precise than "financial" for chunking purposes because
+    it triggers the correct metric weights (RC-dominant) and chunking strategy
+    (legal_articles / hybrid_legal_semantic).
+
+    Priority order (most specific → least specific):
+      legal > regulatory > policy > medical > academic > scientific
+      > cybersecurity > technical > financial > operations
+      > product > education > marketing > narrative > general
+    """
     text_lower = text.lower()
-    custom = config.get("domain_keywords", {})
+    custom  = config.get("domain_keywords", {})
     domains = {**DOMAIN_KEYWORDS, **(custom if isinstance(custom, dict) else {})}
-    scores = {}
+
+    scores: Dict[str, int] = {}
     for domain, kws in domains.items():
         count = 0
         for kw in kws:
             pattern = r"\b" + re.escape(str(kw).lower()) + r"\b"
             count += len(re.findall(pattern, text_lower))
         scores[domain] = count
-    best = max(scores, key=scores.get)
-    return (best if scores[best] > 0 else "general"), scores
+
+    if not scores or max(scores.values()) == 0:
+        return "general", scores
+
+    top_score = max(scores.values())
+
+    # Collect all domains within 20% of the top score
+    close_threshold = top_score * 0.80
+    candidates = [d for d, s in scores.items() if s >= close_threshold]
+
+    # Priority ordering — earlier = more specific/preferred for chunking
+    _PRIORITY = [
+        "legal", "regulatory", "policy",
+        "medical", "academic", "scientific",
+        "cybersecurity", "technical", "research",
+        "financial", "operations", "product",
+        "education", "marketing", "narrative",
+    ]
+
+    # Among tied candidates, pick the highest-priority one
+    for preferred in _PRIORITY:
+        if preferred in candidates:
+            return preferred, scores
+
+    # Fallback: return the raw maximum
+    return max(scores, key=scores.get), scores
 
 
 # ---------------------------------------------------------------------------

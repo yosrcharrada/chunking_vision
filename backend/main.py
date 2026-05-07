@@ -6,6 +6,8 @@ stays responsive; progress is polled via GET /status/{job_id}.
 """
 
 # Import standard libraries for file I/O, JSON manipulation, regular expressions, threading, logging, etc.
+import os # For OS operations like file path handling
+os.environ["HF_HUB_OFFLINE"] = "1"   # use local cache only, no network calls
 import io
 import csv
 import json
@@ -14,7 +16,7 @@ import uuid  # For generating unique job IDs
 import threading  # For running pipeline in background threads
 import traceback  # For detailed error reporting
 import logging  # For logging events and debugging
-import os  # For OS operations like file path handling
+
 import time  # For timing operations
 import chardet
 
@@ -48,10 +50,16 @@ from pipeline.s7_rl import run_rl_loop
 
 # ── PPL pre-load (runs once at startup, never during a request) ───────────
 # Downloads and caches the language-appropriate causal LM for each language.
-# French docs → asi/gpt-fr-cased-small, English → distilgpt2.
+# French docs → dbddv01/gpt2-french-small, English → distilgpt2.
 # If transformers/torch are not installed this is a safe no-op.
-import os
+
 HF_TOKEN = os.getenv("HF_TOKEN")
+
+import warnings
+warnings.filterwarnings("ignore", message=".*position_ids.*")
+warnings.filterwarnings("ignore", message=".*masked_bias.*")
+
+
 
 from pipeline.s3_entropy import PPLValidator
 PPLValidator.preload(["fr", "en"])
@@ -63,8 +71,11 @@ job_store: Dict[str, Dict] = {}   # job_id      → {status, stage, progress, �
 
 # ── Default pipeline configuration ───────────────────────────────────────
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "n_min": 50,
-    "n_max": 1000,
+    "n_min": 80,
+    "n_max": 500,
+    "ga_population": 8,
+    "ga_generations": 5,
+    "ga_workers": 4,
     "tau_jsd_low": 0.15,
     "tau_jsd_high": 0.45,
     "tau_sem": 0.75,
@@ -1246,30 +1257,31 @@ def _stage2_cohesion(chunks: List[Dict]) -> float:
 
 
 def _finalise_chunks(chunks: list) -> list:
-    """Assign a composite chunk_score and clean up non-serialisable fields."""
+    """
+    Assign composite chunk_score and preserve all S3 entropy/boundary
+    fields so the output JSON contains full diagnostics for review.
+    """
     out = []
     for i, c in enumerate(chunks):
         chunk = dict(c)
 
-        jsd = float(chunk.get("jsd_score", 0.0))
+        jsd      = float(chunk.get("jsd_score", 0.0))
         boundary = float(chunk.get("boundary_score", 0.5))
-        icc = float(chunk.get("icc", 0.5))
+        icc      = float(chunk.get("icc", 0.5))
 
-        # Composite chunk quality score (higher = better)
-        # Low JSD = similar to neighbours (less coherent boundary) → penalise
-        # High boundary_score = similar to neighbours → penalise (should differ)
-        chunk_score = float(
-            0.4 * (1.0 - boundary)        # boundary distinctiveness
-            + 0.3 * icc                    # internal cohesion
-            + 0.3 * min(jsd * 2.0, 1.0)   # JSD strength (rescaled)
-        )
         chunk["chunk_index"] = i
-        chunk["chunk_score"] = round(chunk_score, 4)
+        chunk["chunk_score"] = round(
+            0.4 * (1.0 - boundary) + 0.3 * icc + 0.3 * min(jsd * 2.0, 1.0), 4
+        )
         chunk["token_count"] = len(chunk.get("text", "").split())
 
-        # Drop raw embedding vectors from results (too large)
-        chunk.pop("embedding", None)
+        # Drop only raw embedding vectors — everything else is kept
+        chunk.pop("embedding",    None)
         chunk.pop("graph_vector", None)
+
+        # Round lstm_cell (14 floats) to 4 decimals to keep JSON readable
+        if isinstance(chunk.get("lstm_cell"), list):
+            chunk["lstm_cell"] = [round(float(v), 4) for v in chunk["lstm_cell"]]
 
         out.append(chunk)
     return out
