@@ -55,6 +55,7 @@ from pipeline.s7_rl import run_rl_loop
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
+
 import warnings
 warnings.filterwarnings("ignore", message=".*position_ids.*")
 warnings.filterwarnings("ignore", message=".*masked_bias.*")
@@ -73,8 +74,8 @@ job_store: Dict[str, Dict] = {}   # job_id      → {status, stage, progress, �
 DEFAULT_CONFIG: Dict[str, Any] = {
     "n_min": 80,
     "n_max": 500,
-    "ga_population": 8,
-    "ga_generations": 5,
+    "ga_population": 4,               # was 8
+    "ga_generations": 2,              # was 5
     "ga_workers": 4,
     "tau_jsd_low": 0.15,
     "tau_jsd_high": 0.45,
@@ -629,53 +630,73 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
             stage_details=stage_details,
         )
 
-        # ── S7: RL reward calibration per strategy ────────────────────────
+        # ── S7: GA hyperparameter calibration (called ONCE) ──────────────
         _update_job(
             job_id,
             stage="S7",
             progress=82,
-            message="Running RL calibration for every chunking method…",
+            message="Running GA hyperparameter calibration…",
         )
+
+        # Call run_rl_loop ONCE — it internally runs GA per strategy.
+        # The old approach called it once per strategy (8× too much work).
+        best_chunks, reward_history, final_config = run_rl_loop(
+            text,
+            doc_profile,
+            winning_output.get("chunks", []),
+            config,
+        )
+
+        # Build s7_outputs from per_strategy_results for the frontend
+        per_strat = final_config.get("per_strategy_results", {})
         s7_outputs: Dict[str, Dict[str, Any]] = {}
-        total_methods = max(len(strategy_outputs), 1)
-        for idx, (name, output) in enumerate(strategy_outputs.items(), start=1):
-            _update_job(
-                job_id,
-                stage="S7",
-                progress=82 + int(10 * idx / total_methods),
-                message=f"Running RL calibration on {name.replace('_', ' ')}…",
-            )
-            work_config = dict(config)
-            work_config["chunking_strategy"] = name
-            work_config["rl_history_key"] = f"{doc_profile.get('domain', 'general')}::{name}"
-            best_chunks, reward_history, final_config = run_rl_loop(
-                text,
-                doc_profile,
-                output.get("chunks", []),
-                work_config,
-            )
+        for name, res in per_strat.items():
+            strat_chunks = res.get("best_chunks") or winning_output.get("chunks", [])
             s7_outputs[name] = {
-                "chunks": best_chunks,
-                "reward_history": reward_history,
-                "final_config": final_config,
-                "reward_breakdown": final_config.get("reward_breakdown", {}),
-                "iterations": len(reward_history),
-                "final_reward": reward_history[-1] if reward_history else 0.0,
+                "chunks":         strat_chunks,
+                # Use full fitness_history for real convergence curve, not just 2 flat points
+                "reward_history": res.get("fitness_history") or [res.get("s2_baseline", 0), res.get("best_score", 0)],
+                # Merge best_params into config so tuned values are visible
+                "final_config":   {**config, **(res.get("best_params") or {})},
+                "reward_breakdown": {
+                    "s2_baseline": res.get("s2_baseline", 0),
+                    "best_score":  res.get("best_score", 0),
+                    "improvement": res.get("improvement", 0),
+                },
+                "iterations":     res.get("n_evals", 0),
+                "final_reward":   res.get("best_score", 0),
             }
+
+        # Fallback: if GA returned no per_strategy_results use S8 outputs
+        if not s7_outputs:
+            for name, output in strategy_outputs.items():
+                s7_outputs[name] = {
+                    "chunks":         output.get("chunks", []),
+                    "reward_history": reward_history,
+                    "final_config":   final_config,
+                    "reward_breakdown": {},
+                    "iterations":     len(reward_history),
+                    "final_reward":   reward_history[-1] if reward_history else 0.0,
+                }
 
         s7_table, s7_ranked = _evaluate_s7_outputs(s7_outputs, config)
         forced_strategy = str(config.get("chunking_strategy", "auto")).lower()
         if forced_strategy != "auto" and forced_strategy in s7_outputs:
             final_winner = forced_strategy
         else:
-            final_winner = s7_ranked[0][0] if s7_ranked else winner
+            final_winner = (
+                final_config.get("overall_winner_strategy")
+                or (s7_ranked[0][0] if s7_ranked else winner)
+            )
         for row in s7_table:
             row["winner"] = row.get("strategy") == final_winner
 
         final_s7 = s7_outputs.get(final_winner) or next(iter(s7_outputs.values()))
-        best_chunks = final_s7["chunks"]
+        best_chunks    = final_s7["chunks"]
         reward_history = final_s7["reward_history"]
-        final_config = final_s7["final_config"]
+        # Keep the real GA final_config (has optimizer, overall_winner, baseline_reward etc.)
+        # Only merge the winner's best_params into it, don't replace it entirely
+        final_config.update(final_s7.get("final_config", {}))
 
         _update_job(
             job_id,
@@ -683,25 +704,29 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                 **job_store[job_id].get("stage_details", {}),
                 "s7": {
                     "reward_history": reward_history,
-                    "iterations": len(reward_history),
-                    "final_config": final_config,
+                    "iterations":     len(reward_history),
+                    "final_config":   final_config,
                     "reward_breakdown": final_config.get("reward_breakdown", {}),
-                    "strategy": final_winner,
-                    "winner": final_winner,
-                    "ranked": s7_ranked,
-                    "table": s7_table,
+                    "strategy":       final_winner,
+                    "winner":         final_winner,
+                    "ranked":         s7_ranked,
+                    "table":          s7_table,
+                    "per_strategy_results": {
+                        k: {kk: vv for kk, vv in v.items() if kk not in ("best_chunks", "fitness_history")}
+                        for k, v in per_strat.items()
+                    },
                     "strategies": {
                         name: {
-                            "iterations": out["iterations"],
-                            "final_reward": out["final_reward"],
+                            "iterations":     out["iterations"],
+                            "final_reward":   out["final_reward"],
                             "reward_history": out["reward_history"],
                             "reward_breakdown": out["reward_breakdown"],
-                            "final_config": out["final_config"],
-                            "chunk_count": len(out["chunks"]),
-                            "mean_tokens": round(
-                                sum(len(c.get("text", "").split()) for c in out["chunks"]) / len(out["chunks"]),
-                                2,
-                            ) if out["chunks"] else 0,
+                            "final_config":   out["final_config"],
+                            "chunk_count":    len(out["chunks"]),
+                            "mean_tokens":    round(
+                                sum(len(c.get("text", "").split()) for c in out["chunks"])
+                                / max(len(out["chunks"]), 1), 2
+                            ),
                         }
                         for name, out in s7_outputs.items()
                     },
@@ -1257,32 +1282,21 @@ def _stage2_cohesion(chunks: List[Dict]) -> float:
 
 
 def _finalise_chunks(chunks: list) -> list:
-    """
-    Assign composite chunk_score and preserve all S3 entropy/boundary
-    fields so the output JSON contains full diagnostics for review.
-    """
     out = []
     for i, c in enumerate(chunks):
         chunk = dict(c)
-
-        jsd      = float(chunk.get("jsd_score", 0.0))
-        boundary = float(chunk.get("boundary_score", 0.5))
-        icc      = float(chunk.get("icc", 0.5))
-
+        jsd      = float(chunk.get("jsd_score") or 0.0)
+        boundary = float(chunk.get("boundary_score") or 0.5)
+        icc      = float(chunk.get("icc") or 0.5)
         chunk["chunk_index"] = i
         chunk["chunk_score"] = round(
             0.4 * (1.0 - boundary) + 0.3 * icc + 0.3 * min(jsd * 2.0, 1.0), 4
         )
         chunk["token_count"] = len(chunk.get("text", "").split())
-
-        # Drop only raw embedding vectors — everything else is kept
-        chunk.pop("embedding",    None)
+        chunk.pop("embedding", None)
         chunk.pop("graph_vector", None)
-
-        # Round lstm_cell (14 floats) to 4 decimals to keep JSON readable
         if isinstance(chunk.get("lstm_cell"), list):
             chunk["lstm_cell"] = [round(float(v), 4) for v in chunk["lstm_cell"]]
-
         out.append(chunk)
     return out
 

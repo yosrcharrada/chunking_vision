@@ -975,17 +975,17 @@
   },
   "regulatory::recursive__recursive": {
     "best_params": {
-      "tau_jsd_low": 0.3205203964637692,
-      "tau_jsd_high": 0.45380048109732857,
-      "n_max": 900,
-      "n_min": 160,
-      "tau_sem": 0.482057369056628,
-      "tau_percentile_low": 16.711089606259762,
-      "tau_percentile_high": 82.83005626505825
+      "tau_jsd_low": 0.15,
+      "tau_jsd_high": 0.45,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.75,
+      "tau_percentile_low": 25,
+      "tau_percentile_high": 75
     },
-    "best_reward": 0.8163,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.8163
+      "total": 0.768
     },
     "ga_trials": [
       {
@@ -1011,6 +1011,30 @@
           "tau_percentile_high": 82.83005626505825
         },
         "value": 0.8163
+      },
+      {
+        "params": {
+          "tau_jsd_low": 0.30876244722964513,
+          "tau_jsd_high": 0.7050077261447694,
+          "n_max": 900,
+          "n_min": 130,
+          "tau_sem": 0.8702883579894254,
+          "tau_percentile_low": 32.5204860612408,
+          "tau_percentile_high": 65.08619528779454
+        },
+        "value": 0.8163
+      },
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.768
       }
     ]
   },
@@ -1018,15 +1042,15 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
     "ga_trials": [
       {
@@ -1040,136 +1064,100 @@
           "tau_percentile_high": 75
         },
         "value": 0.6855
+      },
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.676
+      },
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.676
       }
     ]
   },
   "regulatory::recursive__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.23631332231121654,
+          "tau_jsd_high": 0.3363133223112166,
+          "n_max": 600,
+          "n_min": 80,
+          "tau_sem": 0.6550841515971229,
+          "tau_percentile_low": 8.059148741060206,
+          "tau_percentile_high": 87.5880996262284
         },
-        "value": 0.8536
+        "value": 0.8587
       },
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::recursive__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -1177,64 +1165,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -1242,64 +1194,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -1307,64 +1223,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -1372,194 +1252,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::sliding_window__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::sliding_window__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -1567,64 +1339,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -1632,64 +1368,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -1697,64 +1397,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -1762,194 +1426,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::structure__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::structure__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -1957,52 +1513,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -2010,52 +1542,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -2063,52 +1571,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -2116,158 +1600,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::semantic_boundaries__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::semantic_boundaries__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -2275,52 +1687,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -2328,52 +1716,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -2381,52 +1745,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -2434,158 +1774,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::sentence_clustering__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::sentence_clustering__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -2593,52 +1861,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -2646,52 +1890,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -2699,52 +1919,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -2752,122 +1948,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::paragraph_pack__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::paragraph_pack__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -2875,40 +2035,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -2916,40 +2064,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -2957,40 +2093,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -2998,122 +2122,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::legal_articles__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::legal_articles__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -3121,40 +2209,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -3162,40 +2238,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8991
+        "value": 0.8707
       }
     ]
   },
@@ -3203,40 +2267,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.7923,
+    "best_reward": 0.768,
     "last_reward_components": {
-      "total": 0.7923
+      "total": 0.768
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.7923
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.7923
+        "value": 0.768
       }
     ]
   },
@@ -3244,122 +2296,86 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.6855,
+    "best_reward": 0.676,
     "last_reward_components": {
-      "total": 0.6855
+      "total": 0.676
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.6855
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.6855
+        "value": 0.676
       }
     ]
   },
   "regulatory::hybrid_legal_semantic__structure": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.13917701247608122,
+      "tau_jsd_high": 0.4418929100062742,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7392876273314368,
+      "tau_percentile_low": 25.5553020956515,
+      "tau_percentile_high": 74.61339193248699
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.865,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.865
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
+          "tau_jsd_low": 0.13917701247608122,
+          "tau_jsd_high": 0.4418929100062742,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7392876273314368,
+          "tau_percentile_low": 25.5553020956515,
+          "tau_percentile_high": 74.61339193248699
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.865
       }
     ]
   },
   "regulatory::hybrid_legal_semantic__paragraph_pack": {
     "best_params": {
-      "tau_jsd_low": 0.15,
-      "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
-      "tau_sem": 0.75,
-      "tau_percentile_low": 25,
-      "tau_percentile_high": 75
+      "tau_jsd_low": 0.16210321904874803,
+      "tau_jsd_high": 0.45788855037469556,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.7458274912193255,
+      "tau_percentile_low": 25.137045459392443,
+      "tau_percentile_high": 75.26805647150792
     },
-    "best_reward": 0.8444,
+    "best_reward": 0.8453,
     "last_reward_components": {
-      "total": 0.8444
+      "total": 0.8453
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
-          "tau_jsd_low": 0.1810890415965769,
-          "tau_jsd_high": 0.7704285838459497,
-          "n_max": 700,
-          "n_min": 160,
-          "tau_sem": 0.48581025224334007,
-          "tau_percentile_low": 11.239780813448107,
-          "tau_percentile_high": 57.323344486727976
+          "tau_jsd_low": 0.16210321904874803,
+          "tau_jsd_high": 0.45788855037469556,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.7458274912193255,
+          "tau_percentile_low": 25.137045459392443,
+          "tau_percentile_high": 75.26805647150792
         },
-        "value": 0.8245
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.8444
+        "value": 0.8453
       }
     ]
   },
@@ -3367,40 +2383,28 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.9035,
+    "best_reward": 0.8477,
     "last_reward_components": {
-      "total": 0.9035
+      "total": 0.8477
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8536
-      },
-      {
-        "params": {
-          "tau_jsd_low": 0.15,
-          "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
-          "tau_sem": 0.75,
-          "tau_percentile_low": 25,
-          "tau_percentile_high": 75
-        },
-        "value": 0.9035
+        "value": 0.8477
       }
     ]
   },
@@ -3408,40 +2412,550 @@
     "best_params": {
       "tau_jsd_low": 0.15,
       "tau_jsd_high": 0.45,
-      "n_max": 1000,
-      "n_min": 50,
+      "n_max": 500,
+      "n_min": 80,
       "tau_sem": 0.75,
       "tau_percentile_low": 25,
       "tau_percentile_high": 75
     },
-    "best_reward": 0.8991,
+    "best_reward": 0.8707,
     "last_reward_components": {
-      "total": 0.8991
+      "total": 0.8707
     },
-    "optuna_trials": [
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
-      },
+        "value": 0.8707
+      }
+    ]
+  },
+  "regulatory__recursive": {
+    "best_params": {
+      "tau_jsd_low": 0.15,
+      "tau_jsd_high": 0.45,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.75,
+      "tau_percentile_low": 25,
+      "tau_percentile_high": 75
+    },
+    "best_reward": 0.768,
+    "last_reward_components": {
+      "total": 0.768
+    },
+    "ga_trials": [
       {
         "params": {
           "tau_jsd_low": 0.15,
           "tau_jsd_high": 0.45,
-          "n_max": 1000,
-          "n_min": 50,
+          "n_max": 500,
+          "n_min": 80,
           "tau_sem": 0.75,
           "tau_percentile_low": 25,
           "tau_percentile_high": 75
         },
-        "value": 0.8991
+        "value": 0.768
+      }
+    ]
+  },
+  "regulatory__sliding_window": {
+    "best_params": {
+      "tau_jsd_low": 0.15,
+      "tau_jsd_high": 0.45,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.75,
+      "tau_percentile_low": 25,
+      "tau_percentile_high": 75
+    },
+    "best_reward": 0.676,
+    "last_reward_components": {
+      "total": 0.676
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.676
+      }
+    ]
+  },
+  "regulatory__structure": {
+    "best_params": {
+      "tau_jsd_low": 0.15,
+      "tau_jsd_high": 0.45,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.75,
+      "tau_percentile_low": 25,
+      "tau_percentile_high": 75
+    },
+    "best_reward": 0.8477,
+    "last_reward_components": {
+      "total": 0.8477
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.8477
+      }
+    ]
+  },
+  "regulatory__paragraph_pack": {
+    "best_params": {
+      "tau_jsd_low": 0.16305133927247223,
+      "tau_jsd_high": 0.3639441149046421,
+      "n_max": 500,
+      "n_min": 150,
+      "tau_sem": 0.5756457638006252,
+      "tau_percentile_low": 19.061567968056504,
+      "tau_percentile_high": 62.36651844130118
+    },
+    "best_reward": 0.8453,
+    "last_reward_components": {
+      "total": 0.8453
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.16305133927247223,
+          "tau_jsd_high": 0.3639441149046421,
+          "n_max": 500,
+          "n_min": 150,
+          "tau_sem": 0.5756457638006252,
+          "tau_percentile_low": 19.061567968056504,
+          "tau_percentile_high": 62.36651844130118
+        },
+        "value": 0.8453
+      }
+    ]
+  },
+  "regulatory__legal_articles": {
+    "best_params": {
+      "tau_jsd_low": 0.15,
+      "tau_jsd_high": 0.45,
+      "n_max": 500,
+      "n_min": 80,
+      "tau_sem": 0.75,
+      "tau_percentile_low": 25,
+      "tau_percentile_high": 75
+    },
+    "best_reward": 0.8477,
+    "last_reward_components": {
+      "total": 0.8477
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.15,
+          "tau_jsd_high": 0.45,
+          "n_max": 500,
+          "n_min": 80,
+          "tau_sem": 0.75,
+          "tau_percentile_low": 25,
+          "tau_percentile_high": 75
+        },
+        "value": 0.8477
+      }
+    ]
+  },
+  "regulatory__hybrid_legal_semantic": {
+    "best_params": {
+      "tau_jsd_low": 0.13719229888327528,
+      "tau_jsd_high": 0.46153556081933145,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7640355482321626,
+      "tau_percentile_low": 25.423162801508514,
+      "tau_percentile_high": 76.55166883741416
+    },
+    "best_reward": 0.8761,
+    "last_reward_components": {
+      "total": 0.8761
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.13719229888327528,
+          "tau_jsd_high": 0.46153556081933145,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7640355482321626,
+          "tau_percentile_low": 25.423162801508514,
+          "tau_percentile_high": 76.55166883741416
+        },
+        "value": 0.8761
+      }
+    ]
+  },
+  "general__recursive": {
+    "best_params": {
+      "tau_jsd_low": 0.16051914720158533,
+      "tau_jsd_high": 0.463709769708315,
+      "n_max": 525,
+      "n_min": 60,
+      "tau_sem": 0.7362663430949916,
+      "tau_percentile_low": 26.292553649541013,
+      "tau_percentile_high": 75.72021332399119
+    },
+    "best_reward": 0.6182,
+    "last_reward_components": {
+      "total": 0.6182
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.16051914720158533,
+          "tau_jsd_high": 0.463709769708315,
+          "n_max": 525,
+          "n_min": 60,
+          "tau_sem": 0.7362663430949916,
+          "tau_percentile_low": 26.292553649541013,
+          "tau_percentile_high": 75.72021332399119
+        },
+        "value": 0.6182
+      }
+    ]
+  },
+  "general__sliding_window": {
+    "best_params": {
+      "tau_jsd_low": 0.1075221699004292,
+      "tau_jsd_high": 0.30985752451054793,
+      "n_max": 150,
+      "n_min": 60,
+      "tau_sem": 0.6651986776098688,
+      "tau_percentile_low": 21.699418182137173,
+      "tau_percentile_high": 69.27173724021578
+    },
+    "best_reward": 0.7261,
+    "last_reward_components": {
+      "total": 0.7261
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.1075221699004292,
+          "tau_jsd_high": 0.30985752451054793,
+          "n_max": 150,
+          "n_min": 60,
+          "tau_sem": 0.6651986776098688,
+          "tau_percentile_low": 21.699418182137173,
+          "tau_percentile_high": 69.27173724021578
+        },
+        "value": 0.7261
+      }
+    ]
+  },
+  "general__structure": {
+    "best_params": {
+      "tau_jsd_low": 0.3082256949712116,
+      "tau_jsd_high": 0.40822569497121164,
+      "n_max": 525,
+      "n_min": 50,
+      "tau_sem": 0.95,
+      "tau_percentile_low": 25.883832212966816,
+      "tau_percentile_high": 79.58995081457914
+    },
+    "best_reward": 0.6182,
+    "last_reward_components": {
+      "total": 0.6182
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.3082256949712116,
+          "tau_jsd_high": 0.40822569497121164,
+          "n_max": 525,
+          "n_min": 50,
+          "tau_sem": 0.95,
+          "tau_percentile_low": 25.883832212966816,
+          "tau_percentile_high": 79.58995081457914
+        },
+        "value": 0.6182
+      }
+    ]
+  },
+  "general__paragraph_pack": {
+    "best_params": {
+      "tau_jsd_low": 0.2835686635981724,
+      "tau_jsd_high": 0.5247834104930422,
+      "n_max": 150,
+      "n_min": 30,
+      "tau_sem": 0.4,
+      "tau_percentile_low": 13.98354840165356,
+      "tau_percentile_high": 94.12570264594653
+    },
+    "best_reward": 0.7261,
+    "last_reward_components": {
+      "total": 0.7261
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.2835686635981724,
+          "tau_jsd_high": 0.5247834104930422,
+          "n_max": 150,
+          "n_min": 30,
+          "tau_sem": 0.4,
+          "tau_percentile_low": 13.98354840165356,
+          "tau_percentile_high": 94.12570264594653
+        },
+        "value": 0.7261
+      }
+    ]
+  },
+  "education__recursive": {
+    "best_params": {
+      "tau_jsd_low": 0.25278759523211614,
+      "tau_jsd_high": 0.3527875952321161,
+      "n_max": 325,
+      "n_min": 170,
+      "tau_sem": 0.6020011903160585,
+      "tau_percentile_low": 10.699055236065389,
+      "tau_percentile_high": 75.53587728063795
+    },
+    "best_reward": 0.8578,
+    "last_reward_components": {
+      "total": 0.8578
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.25278759523211614,
+          "tau_jsd_high": 0.3527875952321161,
+          "n_max": 325,
+          "n_min": 170,
+          "tau_sem": 0.6020011903160585,
+          "tau_percentile_low": 10.699055236065389,
+          "tau_percentile_high": 75.53587728063795
+        },
+        "value": 0.8578
+      }
+    ]
+  },
+  "education__sliding_window": {
+    "best_params": {
+      "tau_jsd_low": 0.2250959880652929,
+      "tau_jsd_high": 0.4741005145525584,
+      "n_max": 775,
+      "n_min": 180,
+      "tau_sem": 0.5668922874392076,
+      "tau_percentile_low": 26.12166065569431,
+      "tau_percentile_high": 70.79819989375414
+    },
+    "best_reward": 0.812,
+    "last_reward_components": {
+      "total": 0.812
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.2250959880652929,
+          "tau_jsd_high": 0.4741005145525584,
+          "n_max": 775,
+          "n_min": 180,
+          "tau_sem": 0.5668922874392076,
+          "tau_percentile_low": 26.12166065569431,
+          "tau_percentile_high": 70.79819989375414
+        },
+        "value": 0.812
+      }
+    ]
+  },
+  "education__structure": {
+    "best_params": {
+      "tau_jsd_low": 0.1718183702853378,
+      "tau_jsd_high": 0.4841779499429901,
+      "n_max": 175,
+      "n_min": 100,
+      "tau_sem": 0.8501465633010082,
+      "tau_percentile_low": 14.701675823792952,
+      "tau_percentile_high": 56.31528910952032
+    },
+    "best_reward": 0.8747,
+    "last_reward_components": {
+      "total": 0.8747
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.1718183702853378,
+          "tau_jsd_high": 0.4841779499429901,
+          "n_max": 175,
+          "n_min": 100,
+          "tau_sem": 0.8501465633010082,
+          "tau_percentile_low": 14.701675823792952,
+          "tau_percentile_high": 56.31528910952032
+        },
+        "value": 0.8747
+      }
+    ]
+  },
+  "education__paragraph_pack": {
+    "best_params": {
+      "tau_jsd_low": 0.3118968210732741,
+      "tau_jsd_high": 0.45323244341798596,
+      "n_max": 275,
+      "n_min": 100,
+      "tau_sem": 0.9229585389039829,
+      "tau_percentile_low": 16.114857901106557,
+      "tau_percentile_high": 79.49014295576268
+    },
+    "best_reward": 0.8772,
+    "last_reward_components": {
+      "total": 0.8772
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.3118968210732741,
+          "tau_jsd_high": 0.45323244341798596,
+          "n_max": 275,
+          "n_min": 100,
+          "tau_sem": 0.9229585389039829,
+          "tau_percentile_low": 16.114857901106557,
+          "tau_percentile_high": 79.49014295576268
+        },
+        "value": 0.8772
+      }
+    ]
+  },
+  "financial__recursive": {
+    "best_params": {
+      "tau_jsd_low": 0.16051914720158533,
+      "tau_jsd_high": 0.463709769708315,
+      "n_max": 525,
+      "n_min": 80,
+      "tau_sem": 0.7362663430949916,
+      "tau_percentile_low": 26.292553649541013,
+      "tau_percentile_high": 75.72021332399119
+    },
+    "best_reward": 0.8597,
+    "last_reward_components": {
+      "total": 0.8597
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.16051914720158533,
+          "tau_jsd_high": 0.463709769708315,
+          "n_max": 525,
+          "n_min": 80,
+          "tau_sem": 0.7362663430949916,
+          "tau_percentile_low": 26.292553649541013,
+          "tau_percentile_high": 75.72021332399119
+        },
+        "value": 0.8597
+      }
+    ]
+  },
+  "financial__sliding_window": {
+    "best_params": {
+      "tau_jsd_low": 0.05,
+      "tau_jsd_high": 0.29956250077060437,
+      "n_max": 575,
+      "n_min": 210,
+      "tau_sem": 0.5536384759860166,
+      "tau_percentile_low": 27.35783072583276,
+      "tau_percentile_high": 84.60487208776578
+    },
+    "best_reward": 0.6979,
+    "last_reward_components": {
+      "total": 0.6979
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.05,
+          "tau_jsd_high": 0.29956250077060437,
+          "n_max": 575,
+          "n_min": 210,
+          "tau_sem": 0.5536384759860166,
+          "tau_percentile_low": 27.35783072583276,
+          "tau_percentile_high": 84.60487208776578
+        },
+        "value": 0.6979
+      }
+    ]
+  },
+  "financial__structure": {
+    "best_params": {
+      "tau_jsd_low": 0.29098260834577067,
+      "tau_jsd_high": 0.3909826083457707,
+      "n_max": 675,
+      "n_min": 50,
+      "tau_sem": 0.9358320929547491,
+      "tau_percentile_low": 19.256556590598176,
+      "tau_percentile_high": 70.47841060500988
+    },
+    "best_reward": 0.8013,
+    "last_reward_components": {
+      "total": 0.8013
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.29098260834577067,
+          "tau_jsd_high": 0.3909826083457707,
+          "n_max": 675,
+          "n_min": 50,
+          "tau_sem": 0.9358320929547491,
+          "tau_percentile_low": 19.256556590598176,
+          "tau_percentile_high": 70.47841060500988
+        },
+        "value": 0.8013
+      }
+    ]
+  },
+  "financial__paragraph_pack": {
+    "best_params": {
+      "tau_jsd_low": 0.19934347625994875,
+      "tau_jsd_high": 0.33541585902888343,
+      "n_max": 875,
+      "n_min": 170,
+      "tau_sem": 0.6538516726263732,
+      "tau_percentile_low": 35.32122460493701,
+      "tau_percentile_high": 64.93442727171808
+    },
+    "best_reward": 0.8505,
+    "last_reward_components": {
+      "total": 0.8505
+    },
+    "ga_trials": [
+      {
+        "params": {
+          "tau_jsd_low": 0.19934347625994875,
+          "tau_jsd_high": 0.33541585902888343,
+          "n_max": 875,
+          "n_min": 170,
+          "tau_sem": 0.6538516726263732,
+          "tau_percentile_low": 35.32122460493701,
+          "tau_percentile_high": 64.93442727171808
+        },
+        "value": 0.8505
       }
     ]
   }
