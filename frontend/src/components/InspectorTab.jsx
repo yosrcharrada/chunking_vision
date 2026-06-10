@@ -1,6 +1,6 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell, Legend,
+  Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell,
 } from 'recharts'
 import EvaluationTable from './EvaluationTable'
 import ScoringFormulas from './ScoringFormulas'
@@ -48,19 +48,27 @@ function EntityGraph({ graphData }) {
         a.vx += dx / dist * f; a.vy += dy / dist * f
         b.vx -= dx / dist * f; b.vy -= dy / dist * f
       })
+
+      // FIX 1: clamp using node radius so no circle clips at viewBox edge
       nodes.forEach(n => {
         n.vx += (W / 2 - n.x) * 0.003; n.vy += (H / 2 - n.y) * 0.003
         n.vx *= 0.75; n.vy *= 0.75
-        n.x = Math.max(20, Math.min(W - 20, n.x + n.vx))
-        n.y = Math.max(16, Math.min(H - 16, n.y + n.vy))
+        const r = 9 + Math.min(n.entity_count * 1.4, 10)
+        n.x = Math.max(r + 4, Math.min(W - r - 4, n.x + n.vx))
+        n.y = Math.max(r + 4, Math.min(H - r - 4, n.y + n.vy))
       })
     }
+
+    // FIX 1: normalise edge stroke-width to [0.5, 5]px — raw counts caused huge widths
+    const _weights = edges.map(e => e.weight || 1)
+    const _minW = Math.min(..._weights), _maxW = Math.max(..._weights)
+    const _normW = w => _maxW === _minW ? 1.5 : 0.5 + ((w - _minW) / (_maxW - _minW)) * 4.5
 
     let html = ''
     edges.forEach(e => {
       const a = byId[e.source], b = byId[e.target]
       if (!a || !b) return
-      html += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="#D4D4D8" stroke-width="${0.8 + (e.weight || 1) * 0.4}" stroke-opacity="0.7"/>`
+      html += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="#D4D4D8" stroke-width="${_normW(e.weight || 1).toFixed(1)}" stroke-opacity="0.7"/>`
     })
     nodes.forEach(n => {
       const r = 9 + Math.min(n.entity_count * 1.4, 10)
@@ -70,15 +78,28 @@ function EntityGraph({ graphData }) {
     svg.innerHTML = html
   }, [graphData])
 
-  if (!graphData || !(graphData.nodes?.length)) {
-    return <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)', fontSize: 13 }}>No entity connections detected.</div>
+  // FIX 1: proper empty state when no nodes
+  if (!graphData || !graphData.nodes?.length) {
+    return (
+      <div
+        className="entity-graph-svg"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexDirection: 'column', gap: 8,
+          color: 'var(--text-muted)', fontSize: 13,
+        }}
+      >
+        <span style={{ fontSize: 28, opacity: 0.3 }}>⬡</span>
+        No named entities found in this strategy's chunks.
+      </div>
+    )
   }
 
   return (
     <svg
       ref={svgRef}
       className="entity-graph-svg"
-      viewBox={`0 0 700 250`}
+      viewBox="0 0 700 250"
       preserveAspectRatio="xMidYMid meet"
     />
   )
@@ -201,7 +222,13 @@ function StrategyScoreChart({ scores }) {
             <Tooltip content={<ChartTooltip />} />
             <Bar dataKey="score" name="Score" radius={[4, 4, 0, 0]}>
               {data.map((entry, i) => (
-                <Cell key={i} fill={i === 0 ? '#FFE600' : '#E4E4E7'} />
+                // FIX 6: winner bar is yellow, others gray
+                <Cell
+                  key={i}
+                  fill={i === 0 ? '#FFE600' : '#E4E4E7'}
+                  stroke={i === 0 ? '#b8a800' : 'none'}
+                  strokeWidth={i === 0 ? 1 : 0}
+                />
               ))}
             </Bar>
           </BarChart>
@@ -243,6 +270,7 @@ export default function InspectorTab({ results, config }) {
     return `${d.chunk_count} chunks · S3 ${d.s3_chunk_count ?? '—'} · S4 ${d.s4_chunk_count ?? '—'} · Metric: ${(d.metric || 'jsd').toUpperCase()}`
   }
 
+  // FIX 2: S7 stage row is BEFORE S8 (correct execution order)
   const stages = [
     {
       num: 'S1', name: 'Document Profiler',
@@ -259,12 +287,7 @@ export default function InspectorTab({ results, config }) {
       num: 'S3–S6', name: 'Full Pipeline Per Strategy',
       detail: strategyNames.map(n => `${n}: ${getS3S6Detail(n)}`).join('<br/>'),
     },
-    {
-      num: 'S8', name: 'Strategy Evaluator',
-      detail: s8.winner
-        ? `Winner: <strong>${s8.winner}</strong> · Ranked: ${(s8.ranked || []).map(([n, sc]) => `${n} (${(sc * 100).toFixed(1)}%)`).join(' › ')}`
-        : '',
-    },
+    // FIX 2: S7 before S8
     {
       num: 'S7', name: 'RL Reward Calibration',
       detail: Object.keys(s7Strategies).length
@@ -273,11 +296,16 @@ export default function InspectorTab({ results, config }) {
         ? `${s7.iterations} iterations on <strong>${s7.strategy}</strong> · Final: ${(results.reward_history?.at(-1) || 0).toFixed(4)}`
         : '',
     },
+    {
+      num: 'S8', name: 'Strategy Evaluator (Pre-RL snapshot)',
+      detail: s8.winner
+        ? `Winner: <strong>${s8.winner}</strong> · Ranked: ${(s8.ranked || []).map(([n, sc]) => `${n} (${(sc * 100).toFixed(1)}%)`).join(' › ')}`
+        : '',
+    },
   ]
 
   const winnerName = s7.winner || s7.strategy || s8.winner
   const selectedJsd = selectedDetails.jsd_series || details.s3?.jsd_series || []
-
   const jsdData = selectedJsd.map((v, i) => ({ idx: `C${i}`, score: v }))
   const activeRewardHistory = selectedS7.reward_history || results.reward_history || []
   const rlData  = activeRewardHistory.map((v, i) => ({ iter: `Iter ${i}`, reward: v }))
@@ -303,22 +331,24 @@ export default function InspectorTab({ results, config }) {
         </div>
       </div>
 
-      {/* Strategy score bar + evaluation table */}
+      {/* Strategy score bar chart */}
       <StrategyScoreChart scores={evalScores} />
 
+      {/* S8 evaluation table */}
       {s8.table?.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <EvaluationTable table={s8.table} winner={s8.winner} />
         </div>
       )}
 
+      {/* FIX 3: S7 evaluation table with isS7={true} */}
       {s7.table?.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <EvaluationTable
             table={s7.table}
             winner={s7.winner || s7.strategy}
             title="S7 RL Evaluation"
-            note="This ranks the chunking methods after RL calibration. The score is the final multi-objective reward for each method."
+            isS7={true}
           />
         </div>
       )}
@@ -371,22 +401,10 @@ export default function InspectorTab({ results, config }) {
             {selectedStrategy && <span className="badge">{selectedStrategy.replace(/_/g, ' ')}</span>}
           </div>
           <div className="s3-explain-grid">
-            <div>
-              <strong>Hard</strong>
-              <span>clear boundary kept</span>
-            </div>
-            <div>
-              <strong>Soft</strong>
-              <span>uncertain boundary kept for S4</span>
-            </div>
-            <div>
-              <strong>Merged</strong>
-              <span>weak boundary removed</span>
-            </div>
-            <div>
-              <strong>Protected</strong>
-              <span>article/section boundary preserved</span>
-            </div>
+            <div><strong>Hard</strong><span>clear boundary kept</span></div>
+            <div><strong>Soft</strong><span>uncertain boundary kept for S4</span></div>
+            <div><strong>Merged</strong><span>weak boundary removed</span></div>
+            <div><strong>Protected</strong><span>article/section boundary preserved</span></div>
           </div>
           <div className="s3-summary-strip">
             {[
@@ -418,7 +436,7 @@ export default function InspectorTab({ results, config }) {
 
       {/* Charts */}
       <div className="inspector-grid" style={{ marginTop: 14 }}>
-        {/* JSD */}
+        {/* JSD boundary signal */}
         <div className="card">
           <div className="card-title">
             Boundary Signal
@@ -445,7 +463,7 @@ export default function InspectorTab({ results, config }) {
           </div>
         </div>
 
-        {/* RL reward */}
+        {/* RL reward curve */}
         <div className="card">
           <div className="card-title">
             RL Reward Curve
@@ -468,15 +486,22 @@ export default function InspectorTab({ results, config }) {
               </div>
             )}
           </div>
+
+          {/* FIX 4: reward breakdown — filter legacy fallback keys */}
           {Object.keys(breakdown).length > 0 && (
             <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              {Object.entries(breakdown).filter(([k]) => k !== 'total').map(([k, v]) => (
+              {Object.entries(breakdown)
+                .filter(([k]) => !['total', 's2_baseline', 'best_score', 'improvement'].includes(k))
+                .map(([k, v]) => (
                 <span key={k}>
-                  <strong style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{k}:</strong> {(v * 100).toFixed(1)}%
+                  <strong style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{k}:</strong>{' '}
+                  {(Number(v) * 100).toFixed(1)}%
                 </span>
               ))}
               {breakdown.total != null && (
-                <span style={{ fontWeight: 700, color: 'var(--yellow-dark)' }}>Total: {breakdown.total.toFixed(4)}</span>
+                <span style={{ fontWeight: 700, color: 'var(--yellow-dark)' }}>
+                  Total: {Number(breakdown.total).toFixed(4)}
+                </span>
               )}
             </div>
           )}
@@ -488,9 +513,9 @@ export default function InspectorTab({ results, config }) {
         <div className="card" style={{ marginTop: 14 }}>
           <div className="card-title">Embedding Ensemble</div>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {details.s6.ensemble_models?.length
+            {details.s6?.ensemble_models?.length
               ? <>Models: <strong>{details.s6.ensemble_models.join(', ')}</strong> · {selectedStrategy ? <>Selected method: <strong>{selectedStrategy.replace(/_/g, ' ')}</strong> · </> : null}Projection dim: {selectedDetails.embedding_dim || details.s6.embedding_dim}</>
-              : <>Fallback model: {details.s6.model || 'n/a'}</>
+              : <>Fallback model: {details.s6?.model || 'n/a'}</>
             }
           </div>
         </div>
@@ -503,7 +528,8 @@ export default function InspectorTab({ results, config }) {
           {selectedStrategy && <span className="badge">{selectedStrategy.replace(/_/g, ' ')}</span>}
         </div>
         <EntityGraph graphData={graphData} />
-        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
+        {/* FIX 5: legend font 12px (was 11px) */}
+        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
           Nodes = chunks · Edges = shared named entities · Node size ∝ entity count
         </div>
       </div>

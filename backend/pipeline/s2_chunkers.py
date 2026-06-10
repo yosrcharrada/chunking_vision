@@ -78,6 +78,30 @@ VALID_STRATEGIES = {
 }
 
 
+def _fix_span_gaps(chunks: List[Dict], text: str) -> List[Dict]:
+    """
+    Snap each chunk start backward to close whitespace gaps from prev.end.
+
+    Eliminates the 2-6 character gaps between adjacent chunks caused by
+    stripping newlines/spaces at boundary detection time. Only closes gaps
+    that consist entirely of whitespace — never discards real content.
+    """
+    if not chunks:
+        return chunks
+    fixed = []
+    for i, chunk in enumerate(chunks):
+        c = dict(chunk)
+        if i > 0:
+            prev_end  = fixed[-1]["end"]
+            cur_start = c.get("start", prev_end)
+            if cur_start > prev_end:
+                gap_text = text[prev_end:cur_start]
+                if gap_text.strip() == "":   # only close pure-whitespace gaps
+                    c["start"] = prev_end
+        fixed.append(c)
+    return fixed
+
+
 def run_all_chunkers(text: str, doc_type: str, config: Dict[str, Any]) -> Dict[str, List[Dict]]:
     n_min = int(config.get("n_min", 100))
     n_max = int(config.get("n_max", 500))
@@ -196,7 +220,7 @@ def recursive_character_split(
 ) -> List[Dict]:
     separators = _separators_for(doc_type, structure_type)
     raw_chunks = _recursive_split(text, separators, n_min, n_max)
-    return _chunks_from_texts(text, raw_chunks, "recursive")
+    return _fix_span_gaps(_chunks_from_texts(text, raw_chunks, "recursive"), text)
 
 
 def sliding_window_split(text: str, window_size: int, overlap: int) -> List[Dict]:
@@ -219,7 +243,7 @@ def sliding_window_split(text: str, window_size: int, overlap: int) -> List[Dict
         if end_idx == len(tokens):
             break
         i += step
-    return chunks
+    return _fix_span_gaps(chunks, text)
 
 
 def structure_based_split(
@@ -237,22 +261,22 @@ def structure_based_split(
         return _split_table(text, n_min, n_max)
     sections = _split_sections(text)
     chunks = _pack_units_with_offsets(sections, n_min, n_max, "structure", "\n\n")
-    return chunks if len(chunks) > 1 else paragraph_pack_split(text, n_min, n_max)
+    return _fix_span_gaps(chunks if len(chunks) > 1 else paragraph_pack_split(text, n_min, n_max), text)
 
 
 def paragraph_pack_split(text: str, n_min: int, n_max: int) -> List[Dict]:
     units = _paragraph_units(text)
     if len(units) <= 1:
         units = _sentence_units(text)
-    return _pack_units_with_offsets(units, n_min, n_max, "paragraph_pack", "\n\n")
+    return _fix_span_gaps(_pack_units_with_offsets(units, n_min, n_max, "paragraph_pack", "\n\n"), text)
 
 
 def legal_article_split(text: str, n_min: int, n_max: int) -> List[Dict]:
     spans = _boundary_spans(text, LEGAL_BOUNDARY_RE)
     if len(spans) <= 1:
-        return structure_based_split(text, "prose", n_min, n_max, "sectioned")
+        return _fix_span_gaps(structure_based_split(text, "prose", n_min, n_max, "sectioned"), text)
     units = [(text[start:end].strip(), start, end) for start, end in spans if text[start:end].strip()]
-    return _pack_units_with_offsets(units, n_min, n_max, "legal_articles", "\n\n")
+    return _fix_span_gaps(_pack_units_with_offsets(units, n_min, n_max, "legal_articles", "\n\n"), text)
 
 
 def hybrid_legal_semantic_split(
@@ -335,7 +359,7 @@ def hybrid_legal_semantic_split(
         chunks = semantic_boundary_split(text, n_min, n_max, config, "plain")
         for c in chunks:
             c["method"] = "hybrid_legal_semantic"
-        return chunks
+        return _fix_span_gaps(chunks, text)
 
     article_units: List[Tuple[str, int, int]] = [
         (text[s:e].strip(), s, e)
@@ -442,7 +466,7 @@ def hybrid_legal_semantic_split(
     # Ensure method label is set on every chunk
     for c in result:
         c["method"] = "hybrid_legal_semantic"
-    return result
+    return _fix_span_gaps(result, text)
 
 
 def semantic_boundary_split(
@@ -486,7 +510,7 @@ def semantic_boundary_split(
             buf.append(sent)
     if buf:
         chunks.append(_build_chunk_from_units(buf, "semantic_boundaries"))
-    return chunks
+    return _fix_span_gaps(chunks, text)
 
 
 def sentence_cluster_split(text: str, n_min: int, n_max: int, config: Dict[str, Any]) -> List[Dict]:
@@ -522,7 +546,7 @@ def sentence_cluster_split(text: str, n_min: int, n_max: int, config: Dict[str, 
 
     if buf:
         chunks.append(_build_chunk_from_units(buf, "sentence_clustering"))
-    return chunks
+    return _fix_span_gaps(chunks, text)
 
 
 def _detect_structure_type(text: str, doc_type: str) -> str:

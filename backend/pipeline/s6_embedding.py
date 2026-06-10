@@ -366,3 +366,26 @@ def _infer_topic(text: str) -> str:
 def _first_sentence(text: str) -> str:
     parts = re.split(r"(?<=[.!?])\s+", text.strip())
     return (parts[0].strip() if parts else text[:120].strip())[:120]
+
+def embed_texts(texts: List[str], model_name: str = "sentence-transformers/all-MiniLM-L6-v2") -> List[np.ndarray]:
+    """
+    Embed a list of arbitrary texts (used for query embedding in RAG evaluation).
+    Returns list of 256-dim projected embeddings, same space as chunk embeddings.
+    """
+    if not texts:
+        return []
+    try:
+        model = _get_model(model_name)
+        vectors = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        # Apply same JL projection as chunk embeddings (seed=42, dim=256)
+        rng = np.random.RandomState(42)
+        proj = rng.randn(vectors.shape[1], 256).astype(np.float32)
+        proj /= np.linalg.norm(proj, axis=0, keepdims=True)
+        projected = (vectors @ proj).astype(np.float32)
+        norms = np.linalg.norm(projected, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1.0, norms)
+        return [projected[i] / norms[i] for i in range(len(projected))]
+    except Exception as e:
+        logger.warning("embed_texts failed: %s", e)
+        dim = 256
+        return [np.zeros(dim, dtype=np.float32) for _ in texts]

@@ -869,18 +869,27 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
     ppl_validities: List[bool] = []
     for i in range(len(chunks) - 1):
         if ppl_validator is not None:
-            # NEW: PPL validation of merge decision
-            is_valid = ppl_validator.validate_merge(
-                chunks[i]["text"],
-                chunks[i + 1]["text"],
-                threshold=ppl_threshold
-            )
+            # FIX: compute value first, set ppl_valid only when non-null
+            try:
+                ppl_value = ppl_validator.compute_ppl(chunks[i]["text"])
+                chunks[i]["chunk_ppl"] = round(float(ppl_value), 4) if ppl_value is not None else None
+            except Exception:
+                chunks[i]["chunk_ppl"] = None
+            # ppl_valid = True ONLY if we actually got a value
+            chunks[i]["ppl_valid"] = chunks[i]["chunk_ppl"] is not None
+            try:
+                is_valid = ppl_validator.validate_merge(
+                    chunks[i]["text"],
+                    chunks[i + 1]["text"],
+                    threshold=ppl_threshold,
+                )
+            except Exception:
+                is_valid = True  # fail-open: don't block merge on PPL error
             ppl_validities.append(is_valid)
-            # Store PPL info if available
-            if not hasattr(chunks[i], "_chunk_ppl"):
-                chunks[i]["chunk_ppl"] = ppl_validator.compute_ppl(chunks[i]["text"])
         else:
-            ppl_validities.append(True)  # assume valid if no validator
+            chunks[i]["chunk_ppl"] = None
+            chunks[i]["ppl_valid"] = False
+            ppl_validities.append(True)
 
     # ── Pass 5: iterate and apply merge / hard / soft decisions ──────────
     work = [dict(c) for c in chunks]
@@ -1012,25 +1021,31 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
             out.append(curr)
             i += 1
 
-    # ── Attach summary statistics to the last chunk ───────────────────────
+    # ── Attach stage-level metadata under _stage_meta key ───────────────────
+    # NOTE: thresholds and s3_stats are STAGE-LEVEL values, not per-chunk.
+    # Stored under _stage_meta so main.py can pop and promote them to
+    # stage_details.s3. This fixes the bug where chunks[0..17]["thresholds"]
+    # was always None — they only existed on the last chunk before.
     if out:
-        out[-1]["thresholds"] = {
-            "low":  round(tau_low, 4),
-            "high": round(tau_high, 4),
-            "mode": mode,
+        out[-1]["_stage_meta"] = {
+            "thresholds": {
+                "low":  round(tau_low, 4),
+                "high": round(tau_high, 4),
+                "mode": mode,
+            },
+            "s3_stats": {
+                "initial_count":   len(chunks),
+                "final_count":     len(out),
+                "merged_count":    merged_count,
+                "hard_count":      hard_count,
+                "soft_count":      soft_count,
+                "protected_count": protected_count,
+                "mean_signal":     round(float(np.mean(signal_history)), 4) if signal_history else 0.0,
+                "merge_ratio":     round(merged_count / max(1, len(chunks) - 1), 4),
+                "ppl_enabled":     bool(enable_ppl and ppl_validator is not None),
+            },
         }
-        out[-1]["s3_stats"] = {
-            "initial_count":   len(chunks),
-            "final_count":     len(out),
-            "merged_count":    merged_count,
-            "hard_count":      hard_count,
-            "soft_count":      soft_count,
-            "protected_count": protected_count,
-            "mean_signal":     round(float(np.mean(signal_history)), 4) if signal_history else 0.0,
-            "merge_ratio":     round(merged_count / max(1, len(chunks) - 1), 4),
-            "ppl_enabled":     bool(enable_ppl and ppl_validator is not None),  # NEW
-        }
-    
+
     return out
 
 
