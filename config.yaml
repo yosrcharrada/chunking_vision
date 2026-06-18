@@ -1,0 +1,30 @@
+pipeline:
+  # ── S3 qEntropy (Tsallis q + diversity number D_q) ──
+  q_entropy_param: 1.0        # Tsallis q in [-1, 1]; 1.0 == Shannon baseline
+  K: 4                        # tree branching factor
+  min_chunk_tokens: 20
+  max_chunk_tokens: 320
+  window: 1                   # neighbour-averaging window for the shift signal
+  # ── S4 ──
+  tau_sem: 0.75               # similarity-merge threshold
+  # ── Evaluation (engine.metrics, Table I) ──
+  qa_count: 12
+  judge_answerability: false
+  embedding_backend: null     # null -> openai if key else multilingual
+  # ── S7 genetic algorithm ──
+  ga_population: 6
+  ga_generations: 3
+  # ── S1 domain keyword hints ──
+  domain_keywords:
+    legal:
+      - recital
+      - covenant
+      - arbitration
+    medical:
+      - prognosis
+      - pathology
+      - pharmacology
+    academic:
+      - bibliography
+      - methodology
+      - longitudinal

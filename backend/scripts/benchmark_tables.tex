@@ -1,0 +1,36 @@
+% ── E1: Main comparison (averaged across documents) ──
+\begin{table}[h]\centering\caption{Benchmark (avg.\ across corpora)}
+\begin{tabular}{@{}lcccccc@{}}\toprule
+Method & F1 & MRR & NDCG & SRGT & QCS & Ans.\,Corr. \\\midrule
+Fixed-size & 0.759 & 0.919 & 0.932 & 0.546 & 0.611 & 0.833 \\
+RCTS 512/64 & 0.789 & 0.906 & 0.939 & 0.530 & 0.594 & 0.800 \\
+Semantic-P95 & 0.699 & 0.896 & 0.907 & 0.549 & 0.616 & 0.800 \\
+Ours (Shannon, q=1) & 0.747 & 0.891 & 0.936 & 0.507 & 0.574 & 0.667 \\
+\textbf{Ours (Tsallis, GA)} & 0.812 & 0.935 & 0.950 & 0.525 & 0.586 & 0.667 \\
+\bottomrule\end{tabular}\end{table}
+
+% ── E2: q-sweep (averaged across documents) ──
+\begin{table}[h]\centering\caption{Effect of Tsallis $q$ (avg.)}
+\begin{tabular}{@{}lcccccc@{}}\toprule
+$q$ & $D_q$ & \#chunks & F1 & MRR & NDCG & Ans.\,Corr. \\\midrule
+$-1$ & 398.73 & 324.0 & 0.761 & 0.916 & 0.932 & 0.800 \\
+$-0.5$ & 226.01 & 227.0 & 0.770 & 0.898 & 0.926 & 0.700 \\
+$0$ & 163.00 & 164.0 & 0.728 & 0.863 & 0.929 & 0.700 \\
+$0.5$ & 133.38 & 134.3 & 0.750 & 0.902 & 0.934 & 0.667 \\
+$1$ (Shannon) & 115.86 & 116.7 & 0.747 & 0.891 & 0.936 & 0.667 \\
+\bottomrule\end{tabular}\end{table}
+
+% ── E3: Before entropy (S2) vs After entropy (S3) vs After GA (S7) ──
+\begin{table}[h]\centering\caption{Pipeline-stage effect (per document)}
+\begin{tabular}{@{}llccc@{}}\toprule
+Document & Stage & F1 & MRR & Ans.\,Corr. \\\midrule
+\multirow{3}{*}{legalbench.pdf} & Before entropy (S2) & 0.817 & 1.000 & 0.700 \\
+ & After entropy (best $q$) & 0.824 & 1.000 & 0.500 \\
+ & After GA (S7) & 0.848 & 1.000 & 0.600 \\\midrule
+\multirow{3}{*}{PubMedQA.pdf} & Before entropy (S2) & 0.610 & 0.748 & 0.700 \\
+ & After entropy (best $q$) & 0.638 & 0.805 & 0.600 \\
+ & After GA (S7) & 0.662 & 0.806 & 0.700 \\\midrule
+\multirow{3}{*}{general.pdf} & Before entropy (S2) & 0.815 & 1.000 & 1.000 \\
+ & After entropy (best $q$) & 0.881 & 1.000 & 1.000 \\
+ & After GA (S7) & 0.925 & 1.000 & 0.700 \\\midrule
+\bottomrule\end{tabular}\end{table}

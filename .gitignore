@@ -1,0 +1,40 @@
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# ── Node / frontend ──────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── Caches & runtime state (regenerated) ─────────────────
+backend/.cache/
+**/.cache/
+backend/uploads/
+backend/storage/
+backend/kg_store.json
+backend/rl_history.json
+
+# ── Logs & scratch ───────────────────────────────────────
+*.log
+*.stackdump
+backend/scripts/smoke.log
+backend/scripts/plumb.log
+backend/scripts/benchmark.log
+
+# ── Secrets (never commit) ───────────────────────────────
+.env
+*.env
+**/.env
+
+# ── OS / editor ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.claude/
+
+# NOTE: docs (*.md), config.yaml, requirements.txt, and the benchmark
+# results (benchmark_results.json / benchmark_tables.tex) ARE committed.

@@ -1,0 +1,23 @@
+# ── Web / API ────────────────────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pyyaml>=6.0
+
+# ── Document parsing ─────────────────────────────────────────────────────
+pdfplumber>=0.10.3
+PyPDF2>=3.0.1
+pdfminer.six>=20221105
+pymupdf>=1.24.0
+chardet>=5.0.0
+
+# ── Numerics ─────────────────────────────────────────────────────────────
+numpy>=1.24.0
+scipy>=1.11.0
+scikit-learn>=1.3.0          # engine.embeddings TF-IDF fallback
+
+# ── qentropy engine: embeddings, metrics, QA, judge ──────────────────────
+sentence-transformers>=2.2.2  # local multilingual / english backends
+torch>=2.0.0                  # sentence-transformers backend
+tiktoken>=0.5.0               # token counting (engine.embeddings)
+openai>=1.0.0                 # optional: embeddings + QA gen + answerability judge
