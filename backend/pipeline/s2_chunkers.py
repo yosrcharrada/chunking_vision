@@ -135,7 +135,8 @@ def run_all_chunkers(text: str, doc_type: str, config: Dict[str, Any]) -> Dict[s
             try:
                 chunks, seconds = fut.result()
                 timings[name] = seconds
-                out[name] = _quality_pass(chunks, text, eff_min, eff_max, name)
+                out[name] = _quality_pass(chunks, text, eff_min, eff_max, name,
+                                          doc_type, structure_type)
             except Exception:
                 timings[name] = 0.0
                 out[name] = []
@@ -828,7 +829,8 @@ def _chunks_from_texts(text: str, chunk_texts: List[str], method: str) -> List[D
     return chunks
 
 
-def _quality_pass(chunks: List[Dict], full_text: str, n_min: int, n_max: int, method: str) -> List[Dict]:
+def _quality_pass(chunks: List[Dict], full_text: str, n_min: int, n_max: int, method: str,
+                  doc_type: str = "prose", structure_type: str = "plain") -> List[Dict]:
     cleaned = []
     for chunk in sorted((dict(c) for c in chunks if c.get("text", "").strip()), key=lambda c: c.get("start", 0)):
         chunk["text"] = chunk["text"].strip()
@@ -840,7 +842,7 @@ def _quality_pass(chunks: List[Dict], full_text: str, n_min: int, n_max: int, me
                 rel_units = [(u[0], base + u[1], base + u[2]) for u in pieces]
                 cleaned.extend(_pack_units_with_offsets(rel_units, n_min, n_max, method, " "))
                 continue
-            cleaned.extend(recursive_character_split(chunk["text"], n_min, n_max, "prose", "plain"))
+            cleaned.extend(recursive_character_split(chunk["text"], n_min, n_max, doc_type, structure_type))
         else:
             cleaned.append(chunk)
     merged = _merge_small_chunks(cleaned, n_min, n_max)

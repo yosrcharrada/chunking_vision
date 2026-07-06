@@ -100,6 +100,20 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
           {/* S4 semantic-merge threshold */}
           <SliderRow label="τ_sem (S4 merge)" min={0.40} max={0.95} step={0.01} decimals={2}
                      value={config.tau_sem} onChange={v => set('tau_sem', v)} />
+
+          {/* S4 similarity kernel: classical cosine vs Fitouhi–Bouzeffour q-cosine (base=q²).
+              q-cosine deforms the inter-chunk angle similarity with the same
+              Tsallis q used by S3; q=±1 recovers the classical angular cosine. */}
+          <div className="cfg-row">
+            <div className="cfg-label"><span>S4 similarity</span></div>
+            <select
+              value={config.s4_similarity ?? 'cosine'}
+              onChange={e => set('s4_similarity', e.target.value)}
+            >
+              <option value="cosine">Cosine (classical)</option>
+              <option value="qcosine">q-Cosine (Fitouhi–Bouzeffour)</option>
+            </select>
+          </div>
         </div>
 
         {/* ── Evaluation (Table I) ───────────────────────────────────────── */}
@@ -118,6 +132,11 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
           </div>
           {!caps.openai_configured && (
             <div className="cfg-hint">No OPENAI_API_KEY — QA + judge disabled; cosine-rank winner is used.</div>
+          )}
+          {caps.openai_configured && (
+            <div className="cfg-hint">
+              LLM provider: {caps.provider === 'azure' ? 'Azure / EY endpoint' : 'OpenAI'} ✓
+            </div>
           )}
         </div>
 

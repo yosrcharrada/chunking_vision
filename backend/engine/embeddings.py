@@ -120,16 +120,29 @@ class EmbeddingService:
     def _embed_openai(self, texts: List[str], model: str) -> np.ndarray:
         """Embed with OpenAI, splitting into batches that run in PARALLEL so even
         documents with thousands of sentences finish in a few seconds."""
-        from openai import OpenAI
+        from .openai_client import get_client, embed_deployment
 
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        client = get_client()              # OpenAI or Azure/EY, per environment
+        model = embed_deployment(model)    # Azure mode: model arg is the deployment name
         cleaned = [self._truncate_tokens(t if t.strip() else " ", OPENAI_MAX_TOKENS)
                    for t in texts]
         batches = [cleaned[i : i + OPENAI_BATCH] for i in range(0, len(cleaned), OPENAI_BATCH)]
 
         def run(batch):
-            resp = client.embeddings.create(model=model, input=batch)
-            return [d.embedding for d in resp.data]
+            # Retry transient errors (connection drops, rate limits) instead of
+            # letting them bubble up to embed()'s fallback — that fallback would
+            # switch to a different-dimension local model mid-document and break
+            # the cosine matmul (1536 vs 384).
+            import time as _t
+            last = None
+            for attempt in range(4):
+                try:
+                    resp = client.embeddings.create(model=model, input=batch)
+                    return [d.embedding for d in resp.data]
+                except Exception as exc:  # noqa: BLE001
+                    last = exc
+                    _t.sleep(1.5 * (attempt + 1))
+            raise last
 
         if len(batches) <= 1:
             results = [run(batches[0])] if batches else []

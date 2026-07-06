@@ -78,10 +78,10 @@ def judge_many(
     """
     if not tasks or not available():
         return [{"answerable": False, "correct": False} for _ in tasks]
-    from openai import OpenAI
+    from .openai_client import get_client, chat_model
 
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    model = model or os.environ.get("OPENAI_QA_MODEL", "gpt-4o-mini")
+    client = get_client()                  # OpenAI or Azure/EY, per environment
+    model = model or chat_model("gpt-4o-mini")
 
     keys = [_key(q, gt, ctx, model) for (q, gt, ctx) in tasks]
     uniq = {}

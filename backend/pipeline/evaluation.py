@@ -24,14 +24,14 @@ winner; no queries → label-free quality fitness).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
 from engine import answerability as A
 from engine import metrics as M
-from engine.embeddings import get_embedder, cosine_matrix
+from engine.embeddings import get_embedder
 from engine.structure import split_sentences
 
 COSINE_RANK_KEYS = ("mrr", "ndcg", "srgt", "qcs")
@@ -143,16 +143,18 @@ def score_run(chunks: List[Dict], ctx: EvalContext, judge: Optional[bool] = None
 def ga_fitness(chunks: List[Dict], ctx: EvalContext) -> float:
     """Fast scalar fitness for the S7 GA, in [0, 1].
 
-    With queries: the primary P2 signal — LLM answer-correctness when judged,
-    else the cosine rank mean (mrr/ndcg/srgt/qcs).  Without queries: a label-free
+    With queries: when the LLM judge is on, fitness blends answer-correctness with
+    the cosine-rank mean (so the GA optimises judged correctness AND ranking);
+    otherwise it is the cosine-rank mean alone.  Without queries: a label-free
     coherence/separation/balance quality (so the GA still tunes q offline)."""
     if not chunks:
         return 0.0
     if ctx.have_queries:
         met = score_run(chunks, ctx, judge=ctx.judge)
+        cosine = float(np.mean([met.get(k, 0.0) for k in COSINE_RANK_KEYS]))
         if ctx.judge and "answer_correct" in met:
-            return float(met["answer_correct"])
-        return float(np.mean([met.get(k, 0.0) for k in COSINE_RANK_KEYS]))
+            return float(0.5 * met["answer_correct"] + 0.5 * cosine)
+        return cosine
     return _label_free_quality(chunks, ctx)
 
 

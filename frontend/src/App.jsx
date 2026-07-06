@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   window: 1,
   // ── S4 ──
   tau_sem: 0.75,
+  s4_similarity: 'cosine',  // 'cosine' (classical) | 'qcosine' (Fitouhi–Bouzeffour q-cosine, base=q²)
   // ── Evaluation (engine.metrics, Table I) ──
   qa_count: 12,
   judge_answerability: false,

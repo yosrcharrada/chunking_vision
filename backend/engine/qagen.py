@@ -53,10 +53,10 @@ def generate_qa(text: str, n: int = 20, model: Optional[str] = None) -> List[dic
     if not openai_configured():
         raise RuntimeError("OPENAI_API_KEY not configured")
 
-    from openai import OpenAI
+    from .openai_client import get_client, chat_model
 
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    model = model or os.environ.get("OPENAI_QA_MODEL", "gpt-4o-mini")
+    client = get_client()                  # OpenAI or Azure/EY, per environment
+    model = model or chat_model("gpt-4o-mini")
 
     user = (
         f"Document:\n\"\"\"\n{_truncate(text)}\n\"\"\"\n\n"

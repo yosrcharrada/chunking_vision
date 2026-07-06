@@ -1,36 +1,113 @@
-% ── E1: Main comparison (averaged across documents) ──
-\begin{table}[h]\centering\caption{Benchmark (avg.\ across corpora)}
-\begin{tabular}{@{}lcccccc@{}}\toprule
-Method & F1 & MRR & NDCG & SRGT & QCS & Ans.\,Corr. \\\midrule
-Fixed-size & 0.759 & 0.919 & 0.932 & 0.546 & 0.611 & 0.833 \\
-RCTS 512/64 & 0.789 & 0.906 & 0.939 & 0.530 & 0.594 & 0.800 \\
-Semantic-P95 & 0.699 & 0.896 & 0.907 & 0.549 & 0.616 & 0.800 \\
-Ours (Shannon, q=1) & 0.747 & 0.891 & 0.936 & 0.507 & 0.574 & 0.667 \\
-\textbf{Ours (Tsallis, GA)} & 0.812 & 0.935 & 0.950 & 0.525 & 0.586 & 0.667 \\
+% ===== TABLE V =====
+\begin{table*}[t]\centering
+\caption{Classical Baselines (Average Across All Corpora). $\uparrow$=higher is better; $\downarrow$=lower is better.}
+\label{tab:baselines}
+\begin{tabular}{@{}lcccccccccc@{}}\toprule
+Method & Prec.$\uparrow$ & Rec.$\uparrow$ & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & ss2fd$\downarrow$ & SRGT$\uparrow$ & Tok.C.$\downarrow$ & QCS$\uparrow$ & AC$\uparrow$ \\\midrule
+Fixed-size & 0.649 & 0.733 & 0.683 & 0.877 & 0.938 & 0.633 & 0.515 & 1447 & 0.566 & 0.844 \\
+RCTS 512/64 & 0.629 & 0.762 & 0.683 & 0.864 & 0.945 & 0.686 & 0.496 & 2328 & 0.554 & 0.822 \\
+Semantic-P95 & 0.615 & 0.684 & 0.644 & 0.878 & 0.907 & 0.494 & 0.528 & 776 & 0.587 & 0.811 \\
+\bottomrule\end{tabular}\end{table*}
+
+% ===== TABLE VI =====
+\begin{table*}[t]\centering
+\caption{Entropy-Enhanced Results (Average Across All Corpora). Green = best overall. $\Delta$ rows show absolute improvement (points $\times100$; raw for ss2fd / Tok.C.).}
+\label{tab:entropy}
+\begin{tabular}{@{}lcccccccccc@{}}\toprule
+Method & Prec.$\uparrow$ & Rec.$\uparrow$ & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & ss2fd$\downarrow$ & SRGT$\uparrow$ & Tok.C.$\downarrow$ & QCS$\uparrow$ & AC$\uparrow$ \\\midrule
+Semantic-95 (best baseline) & 0.615 & 0.684 & 0.644 & 0.878 & 0.907 & 0.494 & 0.528 & 776 & 0.587 & 0.811 \\\midrule
+Shannon ($q\to1$) & 0.669 & 0.735 & 0.692 & 0.865 & 0.948 & 0.644 & 0.490 & 2347 & 0.538 & 0.756 \\
+$q$-entropy (best fixed $q$) & 0.682 & 0.769 & 0.716 & 0.928 & 0.951 & 0.633 & 0.507 & 1445 & 0.553 & 0.800 \\
+\rowcolor{green!18}\textbf{$q$-ent.\ + GA} & 0.661 & 0.785 & 0.709 & 0.897 & 0.956 & 0.700 & 0.490 & 2056 & 0.541 & 0.900 \\\midrule
+$\Delta$: Shannon vs.\ Sem-95 & +5 & +5 & +5 & -1 & +4 & +0.15 & -4 & +1571 & -5 & -6 \\
+$\Delta$: $q$-ent.\ vs.\ Shannon & +1 & +3 & +2 & +6 & +0 & -0.01 & +2 & -902 & +2 & +4 \\
+$\Delta$: GA vs.\ $q$-ent. & -2 & +2 & -1 & -3 & +0 & +0.07 & -2 & +611 & -1 & +10 \\
+\bottomrule\end{tabular}\end{table*}
+
+% ===== TABLE VII =====
+\begin{table}[t]\centering
+\caption{Effect of $q$ on Retrieval Metrics (Average Across All Corpora).}
+\label{tab:qsweep}
+\begin{tabular}{@{}lcccccccl@{}}\toprule
+$q$ & $D_q$ & \#chk & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & Tok.C.$\downarrow$ & AC$\uparrow$ & Behaviour \\\midrule
+$-1$ & 79.8 & 68.1 & 0.700 & 0.922 & 0.945 & 941 & 0.778 & Finest / over-segments \\
+$-0.5$ & 49.0 & 50.0 & 0.694 & 0.894 & 0.941 & 1321 & 0.767 & Sensitive \\
+$0$ & 36.7 & 37.7 & 0.696 & 0.882 & 0.943 & 1691 & 0.744 & Balanced \\
+\textbf{$0.5$} & \textbf{30.8} & \textbf{31.7} & \textbf{0.703} & \textbf{0.884} & \textbf{0.946} & \textbf{2243} & \textbf{0.744} & \textbf{Optimal} \\
+$1$ & 27.2 & 28.1 & 0.692 & 0.865 & 0.948 & 2347 & 0.756 & Shannon (coarsest) \\
 \bottomrule\end{tabular}\end{table}
 
-% ── E2: q-sweep (averaged across documents) ──
-\begin{table}[h]\centering\caption{Effect of Tsallis $q$ (avg.)}
-\begin{tabular}{@{}lcccccc@{}}\toprule
-$q$ & $D_q$ & \#chunks & F1 & MRR & NDCG & Ans.\,Corr. \\\midrule
-$-1$ & 398.73 & 324.0 & 0.761 & 0.916 & 0.932 & 0.800 \\
-$-0.5$ & 226.01 & 227.0 & 0.770 & 0.898 & 0.926 & 0.700 \\
-$0$ & 163.00 & 164.0 & 0.728 & 0.863 & 0.929 & 0.700 \\
-$0.5$ & 133.38 & 134.3 & 0.750 & 0.902 & 0.934 & 0.667 \\
-$1$ (Shannon) & 115.86 & 116.7 & 0.747 & 0.891 & 0.936 & 0.667 \\
+% ===== TABLE VIII =====
+\begin{table}[t]\centering
+\caption{GA-Discovered Optimal $q^{*}$ by Domain.}
+\label{tab:qstar}
+\begin{tabular}{@{}lcccc@{}}\toprule
+ & \textbf{Medical} & \textbf{Code} & \textbf{Legal} & \textbf{General} \\\midrule
+Prec.$\uparrow$ & 0.624 & 0.520 & 0.704 & 0.922 \\
+Rec.$\uparrow$ & 0.765 & 0.665 & 0.834 & 0.937 \\
+MRR$\uparrow$ & 0.836 & 0.783 & 1.000 & 1.000 \\
+NDCG$\uparrow$ & 0.961 & 0.927 & 0.960 & 0.990 \\
+AC$\uparrow$ & 0.833 & 0.900 & 0.933 & 1.000 \\
+Tok.C.$\downarrow$ & 2362 & 1636 & 2229 & 1460 \\
+\midrule $q^{*}$ & -0.05 & 0.07 & -0.56 & -0.19 \\
 \bottomrule\end{tabular}\end{table}
 
-% ── E3: Before entropy (S2) vs After entropy (S3) vs After GA (S7) ──
-\begin{table}[h]\centering\caption{Pipeline-stage effect (per document)}
-\begin{tabular}{@{}llccc@{}}\toprule
-Document & Stage & F1 & MRR & Ans.\,Corr. \\\midrule
-\multirow{3}{*}{legalbench.pdf} & Before entropy (S2) & 0.817 & 1.000 & 0.700 \\
- & After entropy (best $q$) & 0.824 & 1.000 & 0.500 \\
- & After GA (S7) & 0.848 & 1.000 & 0.600 \\\midrule
-\multirow{3}{*}{PubMedQA.pdf} & Before entropy (S2) & 0.610 & 0.748 & 0.700 \\
- & After entropy (best $q$) & 0.638 & 0.805 & 0.600 \\
- & After GA (S7) & 0.662 & 0.806 & 0.700 \\\midrule
-\multirow{3}{*}{general.pdf} & Before entropy (S2) & 0.815 & 1.000 & 1.000 \\
- & After entropy (best $q$) & 0.881 & 1.000 & 1.000 \\
- & After GA (S7) & 0.925 & 1.000 & 0.700 \\\midrule
+% ===== TABLE IX =====
+\begin{table}[t]\centering
+\caption{Component Ablation (Average Across All Corpora). $\Delta$ = F1 change vs.\ Full (points).}
+\label{tab:ablation}
+\begin{tabular}{@{}lccccc@{}}\toprule
+Configuration & Prec.$\uparrow$ & Rec.$\uparrow$ & F1$\uparrow$ & AC$\uparrow$ & $\Delta$F1 \\\midrule
+\textbf{Full ($q$+GA)} & 0.657 & 0.733 & 0.688 & 0.778 & -- \\
+$-$ LSTM & 0.657 & 0.734 & 0.689 & 0.756 & +0 \\
+$-$ Structural priors & 0.672 & 0.728 & 0.695 & 0.711 & +1 \\
+Replace $q$-ent.\ w/ Shannon & 0.669 & 0.735 & 0.692 & 0.756 & +0 \\
+$-$ S4 quality filter & 0.657 & 0.733 & 0.688 & 0.778 & +0 \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE X =====
+\begin{table*}[t]\centering
+\caption{Per-Document F1 across $q$ (best fixed $q$ in \textbf{bold}), with the pre-entropy baseline (Before) and the GA-tuned result.}
+\label{tab:perdoc}
+\begin{tabular}{@{}llcccccccc@{}}\toprule
+Document & Domain & $q=-1$ & $q=-0.5$ & $q=0$ & $q=0.5$ & $q=1$ & Before & $q^{*}$ & GA-F1 \\\midrule
+PubMedQA.pdf & Medical & 0.633 & 0.635 & 0.634 & \textbf{0.657} & 0.650 & 0.633 & -0.78 & 0.645 \\
+cdpf-2025.pdf & Legal & \textbf{0.683} & 0.648 & 0.643 & 0.635 & 0.626 & 0.683 & 0.06 & 0.652 \\
+general.pdf & General & \textbf{0.983} & 0.983 & 0.983 & 0.983 & 0.983 & 0.980 & -0.19 & 0.929 \\
+le\_cancer\_du\_poumon.pdf & Medical & \textbf{0.702} & 0.654 & 0.685 & 0.688 & 0.691 & 0.699 & -0.36 & 0.753 \\
+main.py & Code & 0.613 & \textbf{0.630} & 0.611 & 0.616 & 0.621 & 0.615 & -0.87 & 0.578 \\
+module1\_plasticité cérébr & Medical & 0.581 & 0.581 & 0.613 & \textbf{0.644} & 0.619 & 0.581 & 1.00 & 0.650 \\
+s7\_rl.py & Code & 0.605 & 0.602 & 0.614 & \textbf{0.627} & 0.557 & 0.655 & 1.00 & 0.573 \\
+code\_irpp\_s\_2023.pdf & Legal & 0.829 & 0.833 & 0.828 & 0.832 & \textbf{0.840} & 0.825 & -0.78 & 0.860 \\
+convention-entre-le-gouver & Legal & 0.671 & \textbf{0.680} & 0.651 & 0.645 & 0.643 & 0.656 & -0.97 & 0.738 \\
+\bottomrule\end{tabular}\end{table*}
+
+% ===== TABLE XI =====
+\begin{table}[t]\centering
+\caption{Optimal-$q$ polarity per document. Negative $q$ = finer chunks; positive $q$ = coarser.}
+\label{tab:qsign}
+\begin{tabular}{@{}llcccc@{}}\toprule
+Document & Domain & best $q$ & sign & $q^{*}$(GA) & sign \\\midrule
+PubMedQA.pdf & Medical & $0.5$ & $+$ (coarser) & -0.78 & $-$ (finer) \\
+cdpf-2025.pdf & Legal & $-1$ & $-$ (finer) & 0.06 & $+$ (coarser) \\
+general.pdf & General & $-1$ & $-$ (finer) & -0.19 & $-$ (finer) \\
+le\_cancer\_du\_poumon.p & Medical & $-1$ & $-$ (finer) & -0.36 & $-$ (finer) \\
+main.py & Code & $-0.5$ & $-$ (finer) & -0.87 & $-$ (finer) \\
+module1\_plasticité céré & Medical & $0.5$ & $+$ (coarser) & 1.00 & $+$ (coarser) \\
+s7\_rl.py & Code & $0.5$ & $+$ (coarser) & 1.00 & $+$ (coarser) \\
+code\_irpp\_s\_2023.pdf & Legal & $1$ & $+$ (coarser) & -0.78 & $-$ (finer) \\
+convention-entre-le-gouv & Legal & $-0.5$ & $-$ (finer) & -0.97 & $-$ (finer) \\
+\bottomrule\end{tabular}
+\\[2pt]\footnotesize Negative (finer) $q^{*}$: 6/9 documents; positive (coarser): 3/9. The optimum is document-specific.
+\end{table}
+
+% ===== TABLE XII =====
+\begin{table}[t]\centering
+\caption{Pipeline-Stage Gains (Average Across All Corpora).}
+\label{tab:stages}
+\begin{tabular}{@{}lcccc@{}}\toprule
+Stage & F1$\uparrow$ & MRR$\uparrow$ & AC$\uparrow$ & Tok.C.$\downarrow$ \\\midrule
+Before entropy (raw S2) & 0.703 & 0.933 & 0.767 & 868 \\
+After entropy (best $q$) & 0.716 & 0.928 & 0.800 & 1445 \\
+\rowcolor{green!18}After GA ($q^{*}$) & 0.709 & 0.897 & 0.900 & 2056 \\
 \bottomrule\end{tabular}\end{table}

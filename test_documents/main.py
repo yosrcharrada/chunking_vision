@@ -52,7 +52,6 @@ from pipeline.s7_rl import run_rl_loop
 # its model preload are gone.  Evaluation (engine/metrics.py) and QA generation
 # (engine/qagen.py) use the shared EmbeddingService + optional OpenAI key.
 from pipeline.evaluation import build_context, score_run, rank_runs
-from engine import openai_client  # loads .env + corporate CA at import; selects OpenAI vs Azure/EY
 from engine import qagen
 from engine.embeddings import get_embedder
 
@@ -91,7 +90,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "overlap": 0,
     # ── S4 ───────────────────────────────────────────────────────────────
     "tau_sem": 0.75,               # similarity-merge threshold
-    "s4_similarity": "cosine",     # "cosine" (classical) | "qcosine" (Fitouhi–Bouzeffour q-cosine, base=q²)
     # ── S6 / metrics embedding backend (engine.embeddings) ───────────────
     "embedding_backend": None,     # None → openai if key else multilingual
     "embedding_model": "all-MiniLM-L6-v2",  # legacy alias kept for s6_embedding
@@ -143,16 +141,8 @@ DEFAULT_CONFIG = {**DEFAULT_CONFIG, **(_yaml_cfg.get("pipeline", {}) if isinstan
 def _parse_file(filename: str, content: bytes) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
 
-    # Detect PDFs by content too, so files without a .pdf extension still parse.
-    if ext == "pdf" or content[:5] == b"%PDF-":
+    if ext == "pdf":
         return _parse_pdf(content)
-    # Office/OpenDocument files are zip archives — decoding them as text yields
-    # garbage, so fail clearly instead.
-    if content[:4] == b"PK\x03\x04":
-        raise ValueError(
-            "Office documents (.docx/.xlsx/.pptx/.odt) are not supported; "
-            "please provide a PDF or a plain-text/code file."
-        )
     # TXT, MD, code files — decode as UTF-8 with fallback
     try:
         return _sanitize_text(content.decode("utf-8"))
@@ -432,10 +422,6 @@ def _validate_user_config(user_config: Dict[str, Any]) -> Dict[str, Any]:
             cfg.pop("embedding_backend", None)
     if "judge_answerability" in cfg:
         cfg["judge_answerability"] = bool(cfg["judge_answerability"])
-    # S4 similarity mode (classical cosine vs Fitouhi–Bouzeffour q-cosine)
-    if "s4_similarity" in cfg:
-        sm = str(cfg.get("s4_similarity", "cosine")).lower()
-        cfg["s4_similarity"] = sm if sm in {"cosine", "qcosine"} else "cosine"
     # Validate chunking strategy
     strategy = str(cfg.get("chunking_strategy", "auto")).lower()
     cfg["chunking_strategy"] = strategy if strategy in VALID_STRATEGIES else "auto"
@@ -1887,7 +1873,6 @@ async def backends() -> JSONResponse:
             "default": embedder.default_backend(),
             "openai_configured": qagen.openai_configured(),
             "judge_available": qagen.openai_configured(),
-            "provider": openai_client.provider(),   # "openai" | "azure" | "none"
         })
     except Exception as exc:
         return JSONResponse({"backends": [], "default": None, "error": str(exc)}, status_code=200)

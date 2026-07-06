@@ -219,6 +219,9 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
     window = int(config.get("window", 1))
     backend = config.get("embedding_backend")
     use_dq = bool(config.get("use_dq", True))
+    use_lstm = bool(config.get("use_lstm", True))            # ablation switch
+    use_structure = bool(config.get("use_structure", True))  # ablation switch
+    use_qcos_rank = bool(config.get("s3_qcos_rank", False))  # q-cosine gap re-ranking
 
     # ── Single-unit document ────────────────────────────────────────────────
     if len(chunks) == 1:
@@ -279,6 +282,8 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
         [1.0 if _is_protected_boundary(texts[i + 1]) else 0.0 for i in range(N - 1)],
         dtype=np.float64,
     )
+    if not use_structure:                    # ablation: ignore structural priors
+        struct_flag[:] = 0.0
 
     lstm = _ForwardLSTMCell(input_dim=5, seed=42)
     lstm.reset()
@@ -294,11 +299,30 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
         s, _ = lstm.step(x)
         lstm_scores[i] = s
 
-    # blended, context-aware salience used to RANK boundaries
-    combined = np.clip(0.65 * (gap_d / gmax) + 0.35 * lstm_scores, 0.0, 1.0)
+    # Boundary-strength term used to RANK gaps.  Optionally reshape the raw shift
+    # through the Fitouhi–Bouzeffour q-cosine (base q²).  Unlike S4's single-
+    # threshold gate (a monotone reparam of cosine), here the deformed shift is
+    # BLENDED with the LSTM score, so the nonlinear reshape can reorder which gaps
+    # land in the top round(D_q) — a genuine re-ranking.  q=±1 ⇒ raw shift (sanity).
+    if use_qcos_rank:
+        from .s4_boundary import _q_cosine_similarity  # shared q-cosine kernel
+        cos_seq = np.clip(1.0 - gap_d, -1.0, 1.0)               # adjacent-unit cosine
+        q_shift = np.array(
+            [1.0 - _q_cosine_similarity(float(c), q) for c in cos_seq], dtype=np.float64)
+        smax = float(q_shift.max()) if q_shift.size and q_shift.max() > 0 else 1.0
+        shift_term = q_shift / smax
+    else:
+        shift_term = gap_d / gmax
+
+    # blended, context-aware salience used to RANK boundaries.  Ablating the LSTM
+    # falls back to the (possibly q-reshaped) qentropy shift signal alone.
+    if use_lstm:
+        combined = np.clip(0.65 * shift_term + 0.35 * lstm_scores, 0.0, 1.0)
+    else:
+        combined = np.clip(shift_term, 0.0, 1.0)
 
     # ── 5. Select the `target` strongest gaps (structural priors forced) ────
-    priority = {int(i) for i in np.where(struct_flag > 0.5)[0]}
+    priority = {int(i) for i in np.where(struct_flag > 0.5)[0]} if use_structure else set()
     boundaries = _select_boundaries(
         np.arange(gap_d.size), combined, target, N, prefix, min_chunk_tokens, priority
     )

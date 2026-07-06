@@ -1,0 +1,884 @@
+[
+  {
+    "doc": "PubMedQA.pdf",
+    "domain": "Medical",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.6752,
+          "mrr": 0.8389,
+          "ndcg": 0.9318,
+          "qcs": 0.5694,
+          "retrieval_token_cost": 735.3,
+          "n_chunks": 51
+        },
+        "qcosine": {
+          "f1": 0.6752,
+          "mrr": 0.8389,
+          "ndcg": 0.9318,
+          "qcs": 0.5694,
+          "retrieval_token_cost": 735.3,
+          "n_chunks": 51
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.5641,
+          "mrr": 0.7571,
+          "ndcg": 0.9443,
+          "qcs": 0.5507,
+          "retrieval_token_cost": 1340.0,
+          "n_chunks": 35
+        },
+        "qcosine": {
+          "f1": 0.5891,
+          "mrr": 0.7556,
+          "ndcg": 0.9515,
+          "qcs": 0.5623,
+          "retrieval_token_cost": 912.1,
+          "n_chunks": 43
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.6068,
+          "mrr": 0.8077,
+          "ndcg": 0.9529,
+          "qcs": 0.5461,
+          "retrieval_token_cost": 1559.1,
+          "n_chunks": 25
+        },
+        "qcosine": {
+          "f1": 0.6155,
+          "mrr": 0.8059,
+          "ndcg": 0.9605,
+          "qcs": 0.5581,
+          "retrieval_token_cost": 990.3,
+          "n_chunks": 32
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.6113,
+          "mrr": 0.8077,
+          "ndcg": 0.9574,
+          "qcs": 0.5438,
+          "retrieval_token_cost": 1547.2,
+          "n_chunks": 23
+        },
+        "qcosine": {
+          "f1": 0.6268,
+          "mrr": 0.8063,
+          "ndcg": 0.9562,
+          "qcs": 0.5541,
+          "retrieval_token_cost": 1173.8,
+          "n_chunks": 27
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.6206,
+          "mrr": 0.8083,
+          "ndcg": 0.9656,
+          "qcs": 0.5382,
+          "retrieval_token_cost": 2063.8,
+          "n_chunks": 20
+        },
+        "qcosine": {
+          "f1": 0.6206,
+          "mrr": 0.8083,
+          "ndcg": 0.9656,
+          "qcs": 0.5382,
+          "retrieval_token_cost": 2063.8,
+          "n_chunks": 20
+        }
+      }
+    }
+  },
+  {
+    "doc": "cdpf-2025.pdf",
+    "domain": "Legal",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.7445,
+          "mrr": 1.0,
+          "ndcg": 0.9796,
+          "qcs": 0.6433,
+          "retrieval_token_cost": 1138.2,
+          "n_chunks": 32
+        },
+        "qcosine": {
+          "f1": 0.7445,
+          "mrr": 1.0,
+          "ndcg": 0.9796,
+          "qcs": 0.6433,
+          "retrieval_token_cost": 1138.2,
+          "n_chunks": 32
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.767,
+          "mrr": 1.0,
+          "ndcg": 0.9842,
+          "qcs": 0.6346,
+          "retrieval_token_cost": 1726.6,
+          "n_chunks": 23
+        },
+        "qcosine": {
+          "f1": 0.8007,
+          "mrr": 1.0,
+          "ndcg": 0.9753,
+          "qcs": 0.6473,
+          "retrieval_token_cost": 1219.7,
+          "n_chunks": 33
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.7547,
+          "mrr": 1.0,
+          "ndcg": 0.9867,
+          "qcs": 0.6265,
+          "retrieval_token_cost": 1934.3,
+          "n_chunks": 19
+        },
+        "qcosine": {
+          "f1": 0.7737,
+          "mrr": 1.0,
+          "ndcg": 0.985,
+          "qcs": 0.632,
+          "retrieval_token_cost": 1813.2,
+          "n_chunks": 24
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.7709,
+          "mrr": 1.0,
+          "ndcg": 0.9875,
+          "qcs": 0.6246,
+          "retrieval_token_cost": 2156.0,
+          "n_chunks": 18
+        },
+        "qcosine": {
+          "f1": 0.7696,
+          "mrr": 1.0,
+          "ndcg": 0.9878,
+          "qcs": 0.6291,
+          "retrieval_token_cost": 1906.2,
+          "n_chunks": 20
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.7578,
+          "mrr": 1.0,
+          "ndcg": 0.9884,
+          "qcs": 0.6219,
+          "retrieval_token_cost": 2247.0,
+          "n_chunks": 17
+        },
+        "qcosine": {
+          "f1": 0.7578,
+          "mrr": 1.0,
+          "ndcg": 0.9884,
+          "qcs": 0.6219,
+          "retrieval_token_cost": 2247.0,
+          "n_chunks": 17
+        }
+      }
+    }
+  },
+  {
+    "doc": "code_irpp_s_2023.pdf",
+    "domain": "Legal",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.8283,
+          "mrr": 1.0,
+          "ndcg": 0.9821,
+          "qcs": 0.5696,
+          "retrieval_token_cost": 2293.9,
+          "n_chunks": 13
+        },
+        "qcosine": {
+          "f1": 0.8283,
+          "mrr": 1.0,
+          "ndcg": 0.9821,
+          "qcs": 0.5696,
+          "retrieval_token_cost": 2293.9,
+          "n_chunks": 13
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.8166,
+          "mrr": 1.0,
+          "ndcg": 0.9798,
+          "qcs": 0.5509,
+          "retrieval_token_cost": 2621.1,
+          "n_chunks": 12
+        },
+        "qcosine": {
+          "f1": 0.8166,
+          "mrr": 1.0,
+          "ndcg": 0.9798,
+          "qcs": 0.5509,
+          "retrieval_token_cost": 2621.1,
+          "n_chunks": 12
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.7701,
+          "mrr": 1.0,
+          "ndcg": 0.9906,
+          "qcs": 0.5135,
+          "retrieval_token_cost": 4723.9,
+          "n_chunks": 7
+        },
+        "qcosine": {
+          "f1": 0.7701,
+          "mrr": 1.0,
+          "ndcg": 0.9906,
+          "qcs": 0.5135,
+          "retrieval_token_cost": 4723.9,
+          "n_chunks": 7
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.7418,
+          "mrr": 1.0,
+          "ndcg": 0.9961,
+          "qcs": 0.4816,
+          "retrieval_token_cost": 6017.0,
+          "n_chunks": 5
+        },
+        "qcosine": {
+          "f1": 0.7418,
+          "mrr": 1.0,
+          "ndcg": 0.9961,
+          "qcs": 0.4816,
+          "retrieval_token_cost": 6017.0,
+          "n_chunks": 5
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.7418,
+          "mrr": 1.0,
+          "ndcg": 0.9961,
+          "qcs": 0.4816,
+          "retrieval_token_cost": 6017.0,
+          "n_chunks": 5
+        },
+        "qcosine": {
+          "f1": 0.7418,
+          "mrr": 1.0,
+          "ndcg": 0.9961,
+          "qcs": 0.4816,
+          "retrieval_token_cost": 6017.0,
+          "n_chunks": 5
+        }
+      }
+    }
+  },
+  {
+    "doc": "convention-entre-le-gouvernement-de-la-republique-tunisienne-et-malte-a-eviter-la-double-imposition-.pdf",
+    "domain": "Legal",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.6699,
+          "mrr": 0.9333,
+          "ndcg": 0.9442,
+          "qcs": 0.6097,
+          "retrieval_token_cost": 958.0,
+          "n_chunks": 32
+        },
+        "qcosine": {
+          "f1": 0.6699,
+          "mrr": 0.9333,
+          "ndcg": 0.9442,
+          "qcs": 0.6097,
+          "retrieval_token_cost": 958.0,
+          "n_chunks": 32
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.6534,
+          "mrr": 0.9333,
+          "ndcg": 0.9437,
+          "qcs": 0.6004,
+          "retrieval_token_cost": 1353.6,
+          "n_chunks": 26
+        },
+        "qcosine": {
+          "f1": 0.6934,
+          "mrr": 0.9333,
+          "ndcg": 0.9429,
+          "qcs": 0.617,
+          "retrieval_token_cost": 957.9,
+          "n_chunks": 35
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.6611,
+          "mrr": 0.95,
+          "ndcg": 0.9484,
+          "qcs": 0.5795,
+          "retrieval_token_cost": 1802.2,
+          "n_chunks": 19
+        },
+        "qcosine": {
+          "f1": 0.6916,
+          "mrr": 0.95,
+          "ndcg": 0.9491,
+          "qcs": 0.6035,
+          "retrieval_token_cost": 1359.9,
+          "n_chunks": 24
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.6765,
+          "mrr": 0.95,
+          "ndcg": 0.9593,
+          "qcs": 0.5758,
+          "retrieval_token_cost": 2056.2,
+          "n_chunks": 16
+        },
+        "qcosine": {
+          "f1": 0.682,
+          "mrr": 0.95,
+          "ndcg": 0.9561,
+          "qcs": 0.5922,
+          "retrieval_token_cost": 1772.7,
+          "n_chunks": 19
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.6581,
+          "mrr": 0.95,
+          "ndcg": 0.9648,
+          "qcs": 0.5663,
+          "retrieval_token_cost": 2659.3,
+          "n_chunks": 13
+        },
+        "qcosine": {
+          "f1": 0.6581,
+          "mrr": 0.95,
+          "ndcg": 0.9648,
+          "qcs": 0.5663,
+          "retrieval_token_cost": 2659.3,
+          "n_chunks": 13
+        }
+      }
+    }
+  },
+  {
+    "doc": "general.pdf",
+    "domain": "General",
+    "n_tokens": 2196,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.8391,
+          "mrr": 1.0,
+          "ndcg": 0.99,
+          "qcs": 0.5327,
+          "retrieval_token_cost": 1091.7,
+          "n_chunks": 13
+        },
+        "qcosine": {
+          "f1": 0.8391,
+          "mrr": 1.0,
+          "ndcg": 0.99,
+          "qcs": 0.5327,
+          "retrieval_token_cost": 1091.7,
+          "n_chunks": 13
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.8584,
+          "mrr": 1.0,
+          "ndcg": 0.9907,
+          "qcs": 0.531,
+          "retrieval_token_cost": 1303.1,
+          "n_chunks": 11
+        },
+        "qcosine": {
+          "f1": 0.862,
+          "mrr": 1.0,
+          "ndcg": 0.9871,
+          "qcs": 0.5354,
+          "retrieval_token_cost": 1168.5,
+          "n_chunks": 13
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.7694,
+          "mrr": 0.9,
+          "ndcg": 0.9927,
+          "qcs": 0.519,
+          "retrieval_token_cost": 1643.8,
+          "n_chunks": 9
+        },
+        "qcosine": {
+          "f1": 0.8722,
+          "mrr": 1.0,
+          "ndcg": 0.9873,
+          "qcs": 0.534,
+          "retrieval_token_cost": 1211.7,
+          "n_chunks": 12
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.7793,
+          "mrr": 0.9,
+          "ndcg": 0.9935,
+          "qcs": 0.5218,
+          "retrieval_token_cost": 1565.9,
+          "n_chunks": 9
+        },
+        "qcosine": {
+          "f1": 0.8804,
+          "mrr": 1.0,
+          "ndcg": 0.9897,
+          "qcs": 0.5352,
+          "retrieval_token_cost": 1201.9,
+          "n_chunks": 11
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.7859,
+          "mrr": 0.9,
+          "ndcg": 0.9939,
+          "qcs": 0.5198,
+          "retrieval_token_cost": 1743.6,
+          "n_chunks": 8
+        },
+        "qcosine": {
+          "f1": 0.7859,
+          "mrr": 0.9,
+          "ndcg": 0.9939,
+          "qcs": 0.5198,
+          "retrieval_token_cost": 1743.6,
+          "n_chunks": 8
+        }
+      }
+    }
+  },
+  {
+    "doc": "le_cancer_du_poumon.pdf",
+    "domain": "Medical",
+    "n_tokens": 3167,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.6389,
+          "mrr": 0.9,
+          "ndcg": 0.9641,
+          "qcs": 0.5807,
+          "retrieval_token_cost": 2376.3,
+          "n_chunks": 7
+        },
+        "qcosine": {
+          "f1": 0.6389,
+          "mrr": 0.9,
+          "ndcg": 0.9641,
+          "qcs": 0.5807,
+          "retrieval_token_cost": 2376.3,
+          "n_chunks": 7
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.6799,
+          "mrr": 1.0,
+          "ndcg": 0.988,
+          "qcs": 0.5852,
+          "retrieval_token_cost": 2787.6,
+          "n_chunks": 6
+        },
+        "qcosine": {
+          "f1": 0.6193,
+          "mrr": 1.0,
+          "ndcg": 0.9828,
+          "qcs": 0.5965,
+          "retrieval_token_cost": 2346.5,
+          "n_chunks": 7
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.6671,
+          "mrr": 0.9,
+          "ndcg": 0.9923,
+          "qcs": 0.5731,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 5
+        },
+        "qcosine": {
+          "f1": 0.6671,
+          "mrr": 0.9,
+          "ndcg": 0.9923,
+          "qcs": 0.5731,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 5
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.646,
+          "mrr": 0.8,
+          "ndcg": 0.9951,
+          "qcs": 0.5748,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 4
+        },
+        "qcosine": {
+          "f1": 0.646,
+          "mrr": 0.8,
+          "ndcg": 0.9951,
+          "qcs": 0.5748,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 4
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.646,
+          "mrr": 0.8,
+          "ndcg": 0.9951,
+          "qcs": 0.5748,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 4
+        },
+        "qcosine": {
+          "f1": 0.646,
+          "mrr": 0.8,
+          "ndcg": 0.9951,
+          "qcs": 0.5748,
+          "retrieval_token_cost": 3167.0,
+          "n_chunks": 4
+        }
+      }
+    }
+  },
+  {
+    "doc": "main.py",
+    "domain": "Code",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.5458,
+          "mrr": 0.7333,
+          "ndcg": 0.9505,
+          "qcs": 0.3694,
+          "retrieval_token_cost": 645.0,
+          "n_chunks": 50
+        },
+        "qcosine": {
+          "f1": 0.5458,
+          "mrr": 0.7333,
+          "ndcg": 0.9505,
+          "qcs": 0.3694,
+          "retrieval_token_cost": 645.0,
+          "n_chunks": 50
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.5202,
+          "mrr": 0.75,
+          "ndcg": 0.9513,
+          "qcs": 0.3603,
+          "retrieval_token_cost": 744.9,
+          "n_chunks": 38
+        },
+        "qcosine": {
+          "f1": 0.5164,
+          "mrr": 0.75,
+          "ndcg": 0.9552,
+          "qcs": 0.3635,
+          "retrieval_token_cost": 718.5,
+          "n_chunks": 40
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.4764,
+          "mrr": 0.65,
+          "ndcg": 0.9516,
+          "qcs": 0.3449,
+          "retrieval_token_cost": 1145.7,
+          "n_chunks": 29
+        },
+        "qcosine": {
+          "f1": 0.4762,
+          "mrr": 0.65,
+          "ndcg": 0.9526,
+          "qcs": 0.3508,
+          "retrieval_token_cost": 1106.4,
+          "n_chunks": 30
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.4923,
+          "mrr": 0.65,
+          "ndcg": 0.9517,
+          "qcs": 0.3408,
+          "retrieval_token_cost": 1431.2,
+          "n_chunks": 24
+        },
+        "qcosine": {
+          "f1": 0.4923,
+          "mrr": 0.65,
+          "ndcg": 0.9517,
+          "qcs": 0.3408,
+          "retrieval_token_cost": 1431.2,
+          "n_chunks": 24
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.516,
+          "mrr": 0.65,
+          "ndcg": 0.9518,
+          "qcs": 0.3374,
+          "retrieval_token_cost": 1581.4,
+          "n_chunks": 21
+        },
+        "qcosine": {
+          "f1": 0.516,
+          "mrr": 0.65,
+          "ndcg": 0.9518,
+          "qcs": 0.3374,
+          "retrieval_token_cost": 1581.4,
+          "n_chunks": 21
+        }
+      }
+    }
+  },
+  {
+    "doc": "module1_plasticit\u00e9 c\u00e9r\u00e9brale 2023.pdf",
+    "domain": "Medical",
+    "n_tokens": 1790,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.5422,
+          "mrr": 0.62,
+          "ndcg": 0.9836,
+          "qcs": 0.5867,
+          "retrieval_token_cost": 1216.8,
+          "n_chunks": 10
+        },
+        "qcosine": {
+          "f1": 0.5422,
+          "mrr": 0.62,
+          "ndcg": 0.9836,
+          "qcs": 0.5867,
+          "retrieval_token_cost": 1216.8,
+          "n_chunks": 10
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.5422,
+          "mrr": 0.62,
+          "ndcg": 0.9836,
+          "qcs": 0.5867,
+          "retrieval_token_cost": 1216.8,
+          "n_chunks": 10
+        },
+        "qcosine": {
+          "f1": 0.5741,
+          "mrr": 0.8,
+          "ndcg": 0.9577,
+          "qcs": 0.6167,
+          "retrieval_token_cost": 466.7,
+          "n_chunks": 19
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.5981,
+          "mrr": 0.6333,
+          "ndcg": 0.9853,
+          "qcs": 0.5668,
+          "retrieval_token_cost": 1476.8,
+          "n_chunks": 7
+        },
+        "qcosine": {
+          "f1": 0.5716,
+          "mrr": 0.7,
+          "ndcg": 0.9783,
+          "qcs": 0.5937,
+          "retrieval_token_cost": 1051.6,
+          "n_chunks": 10
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.5981,
+          "mrr": 0.6333,
+          "ndcg": 0.9853,
+          "qcs": 0.5668,
+          "retrieval_token_cost": 1476.8,
+          "n_chunks": 7
+        },
+        "qcosine": {
+          "f1": 0.5701,
+          "mrr": 0.6333,
+          "ndcg": 0.9882,
+          "qcs": 0.5753,
+          "retrieval_token_cost": 1325.0,
+          "n_chunks": 8
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.5981,
+          "mrr": 0.6333,
+          "ndcg": 0.9853,
+          "qcs": 0.5668,
+          "retrieval_token_cost": 1476.8,
+          "n_chunks": 7
+        },
+        "qcosine": {
+          "f1": 0.5981,
+          "mrr": 0.6333,
+          "ndcg": 0.9853,
+          "qcs": 0.5668,
+          "retrieval_token_cost": 1476.8,
+          "n_chunks": 7
+        }
+      }
+    }
+  },
+  {
+    "doc": "s7_rl.py",
+    "domain": "Code",
+    "n_tokens": 6000,
+    "n_queries": 10,
+    "by_q": {
+      "-1": {
+        "cosine": {
+          "f1": 0.6684,
+          "mrr": 1.0,
+          "ndcg": 0.9267,
+          "qcs": 0.4969,
+          "retrieval_token_cost": 540.4,
+          "n_chunks": 55
+        },
+        "qcosine": {
+          "f1": 0.6684,
+          "mrr": 1.0,
+          "ndcg": 0.9267,
+          "qcs": 0.4969,
+          "retrieval_token_cost": 540.4,
+          "n_chunks": 55
+        }
+      },
+      "-0.5": {
+        "cosine": {
+          "f1": 0.6874,
+          "mrr": 1.0,
+          "ndcg": 0.9312,
+          "qcs": 0.4718,
+          "retrieval_token_cost": 1006.0,
+          "n_chunks": 33
+        },
+        "qcosine": {
+          "f1": 0.6646,
+          "mrr": 1.0,
+          "ndcg": 0.941,
+          "qcs": 0.4803,
+          "retrieval_token_cost": 808.3,
+          "n_chunks": 39
+        }
+      },
+      "0": {
+        "cosine": {
+          "f1": 0.6502,
+          "mrr": 1.0,
+          "ndcg": 0.9557,
+          "qcs": 0.4593,
+          "retrieval_token_cost": 1125.5,
+          "n_chunks": 28
+        },
+        "qcosine": {
+          "f1": 0.6522,
+          "mrr": 1.0,
+          "ndcg": 0.9548,
+          "qcs": 0.4631,
+          "retrieval_token_cost": 1059.7,
+          "n_chunks": 29
+        }
+      },
+      "0.5": {
+        "cosine": {
+          "f1": 0.6569,
+          "mrr": 1.0,
+          "ndcg": 0.9585,
+          "qcs": 0.4575,
+          "retrieval_token_cost": 1076.6,
+          "n_chunks": 24
+        },
+        "qcosine": {
+          "f1": 0.6569,
+          "mrr": 1.0,
+          "ndcg": 0.9585,
+          "qcs": 0.4575,
+          "retrieval_token_cost": 1076.6,
+          "n_chunks": 24
+        }
+      },
+      "1": {
+        "cosine": {
+          "f1": 0.6378,
+          "mrr": 1.0,
+          "ndcg": 0.9598,
+          "qcs": 0.4473,
+          "retrieval_token_cost": 1330.7,
+          "n_chunks": 21
+        },
+        "qcosine": {
+          "f1": 0.6378,
+          "mrr": 1.0,
+          "ndcg": 0.9598,
+          "qcs": 0.4473,
+          "retrieval_token_cost": 1330.7,
+          "n_chunks": 21
+        }
+      }
+    }
+  }
+]

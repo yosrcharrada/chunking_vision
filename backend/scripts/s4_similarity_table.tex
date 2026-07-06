@@ -1,0 +1,21 @@
+% ===== S4 similarity-kernel KPI table (avg across corpora) =====
+\begin{table}[t]\centering
+\caption{Effect of the S4 similarity kernel: classical cosine vs.\ the Fitouhi--Bouzeffour $q$-cosine (base $q^{2}$), averaged across all corpora. Upstream S1--S3 and the embeddings fed to S4 are identical between the two arms, so each row isolates the kernel. At $q=\pm1$ the $q$-cosine reduces to the classical angular cosine.}
+\label{tab:s4kernel}
+\begin{tabular}{@{}llcccccr@{}}\toprule
+$q$ & Kernel & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & \#chk & Tok.C.$\downarrow$ \\\midrule
+$-1$ & Cosine & 0.684 & 0.892 & 0.961 & 0.551 & 29.2 & 1221.7 \\
+ & $q$-Cosine & 0.684 & 0.892 & 0.961 & 0.551 & 29.2 & 1221.7 \\
+\midrule
+$-0.5$ & Cosine & 0.677 & 0.896 & 0.966 & 0.541 & 21.6 & 1566.6 \\
+ & $q$-Cosine & 0.682 & 0.915 & 0.964 & 0.552 & 26.8 & 1246.6 \\
+\midrule
+$0$ & Cosine & 0.662 & 0.871 & 0.973 & 0.525 & 16.4 & 2064.3 \\
+ & $q$-Cosine & 0.677 & 0.890 & 0.972 & 0.536 & 19.2 & 1831.5 \\
+\midrule
+$0.5$ & Cosine & 0.664 & 0.860 & 0.976 & 0.521 & 14.4 & 2277.1 \\
+ & $q$-Cosine & 0.674 & 0.871 & 0.975 & 0.527 & 15.8 & 2119.0 \\
+\midrule
+$1$ & Cosine & 0.662 & 0.860 & 0.978 & 0.517 & 12.9 & 2476.3 \\
+ & $q$-Cosine & 0.662 & 0.860 & 0.978 & 0.517 & 12.9 & 2476.3 \\
+\bottomrule\end{tabular}\end{table}

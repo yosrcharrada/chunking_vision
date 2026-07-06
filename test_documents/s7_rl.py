@@ -46,27 +46,31 @@ GA DESIGN CHOICES
   Warm-start          Best params from previous runs seed the initial population
                       (10% of population = warm-started, 90% = random)
 
-SEARCH SPACE (5 genes — see _GENE_SPECS)
+SEARCH SPACE (7 parameters, same as TPE version)
 ──────────────────────────────────────────────────
   n_max                ∈ [150, 900]   — max words per chunk (S2)
   n_min                ∈ [30,  250]   — min words per chunk (S2)
+  tau_jsd_low          ∈ [0.05, 0.40] — S3 merge threshold
+  tau_jsd_high         ∈ [0.20, 0.80] — S3 hard-split threshold
   tau_sem              ∈ [0.40, 0.95] — S4 similarity merge threshold
-  q_entropy_param      ∈ [-1.0, 1.0]  — S3 Tsallis q (drives the D_q boundary count)
-  min_chunk_tokens     ∈ [12,  80]    — S3 qentropy feasibility floor
+  tau_percentile_low   ∈ [5,   45]    — S3 adaptive percentile (low)
+  tau_percentile_high  ∈ [55,  95]    — S3 adaptive percentile (high)
 
 GENE ENCODING
 ─────────────
-  Each individual is a numpy array of 5 floats in [0, 1] (normalised).
+  Each individual is a numpy array of 7 floats in [0, 1] (normalised).
   Decoding maps back to the real parameter range:
-    gene[0] → n_max            = 150 + gene[0] × 750  (snapped to nearest 25)
-    gene[1] → n_min            = 30  + gene[1] × 220  (snapped to nearest 10)
-    gene[2] → τ_sem            = 0.40 + gene[2] × 0.55
-    gene[3] → q_entropy_param  = -1.0 + gene[3] × 2.0
-    gene[4] → min_chunk_tokens = 12  + gene[4] × 68   (snapped to nearest 1)
+    gene[0] → n_max      = 150 + gene[0] × 750    (rounded to nearest 25)
+    gene[1] → n_min      = 30  + gene[1] × 220    (rounded to nearest 10)
+    gene[2] → τ_low      = 0.05 + gene[2] × 0.35
+    gene[3] → τ_high     = 0.20 + gene[3] × 0.60
+    gene[4] → τ_sem      = 0.40 + gene[4] × 0.55
+    gene[5] → p_low      = 5   + gene[5] × 40
+    gene[6] → p_high     = 55  + gene[6] × 40
 
   Normalised encoding makes crossover and mutation scale-invariant — a mutation
   of σ=0.15 in [0,1] space is proportionally the same for every gene regardless
-  of its real-world scale (n_max ranges 750 words, τ_sem ranges only 0.55).
+  of its real-world scale (n_max ranges 750 words, τ_low ranges only 0.35).
 
 UNIFIED SCORING
 ───────────────
@@ -87,6 +91,7 @@ import logging
 import os
 import re
 import warnings
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -364,7 +369,7 @@ def run_rl_loop(
 #  ┌─────────────────┬────────────────────────────────────────────────────────┐
 #  │ CONCEPT         │ MEANING IN THIS PIPELINE                               │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
-#  │ Individual      │ One set of 5 genes                           │
+#  │ Individual      │ One set of 7 hyperparameters                           │
 #  │ (chromosome)    │ [n_max, n_min, τ_low, τ_high, τ_sem, p_low, p_high]   │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
 #  │ Gene            │ One hyperparameter (e.g. n_max=375)                    │
@@ -435,8 +440,8 @@ def _run_strategy_ga(
     """
     Run a Genetic Algorithm for ONE chunking strategy to find its best hyperparams.
 
-    Each individual (chromosome) = one set of 5 genes encoded as a
-    normalised [0,1]^5 numpy array. The fitness of an individual is the chunk
+    Each individual (chromosome) = one set of 7 hyperparameters encoded as a
+    normalised [0,1]^7 numpy array. The fitness of an individual is the chunk
     quality score produced by running the full pipeline with those hyperparams.
 
     Parallelism: every individual in a generation is evaluated SIMULTANEOUSLY
@@ -468,7 +473,7 @@ def _run_strategy_ga(
     # ──────────────────────────────────────────────────────────────────────────
     # STEP 1: INITIALISE POPULATION
     # The population is a list of 'pop_size' chromosomes.
-    # Each chromosome = numpy array of 5 floats in [0,1] (normalised gene space).
+    # Each chromosome = numpy array of 7 floats in [0,1] (normalised gene space).
     # ──────────────────────────────────────────────────────────────────────────
     population = _initialise_population(pop_size, warm_cfg, rng)
 
@@ -615,7 +620,7 @@ def _initialise_population(
       are not all identical — we need diversity even in the seed.
 
     • RANDOM individuals (90% of population):
-      Sampled uniformly from [0,1]^5. These ensure the population
+      Sampled uniformly from [0,1]^7. These ensure the population
       covers the full search space and doesn't prematurely converge
       on the warm-start solution.
 
@@ -644,7 +649,7 @@ def _initialise_population(
             gene  = np.clip(warm_gene + noise, 0.0, 1.0)
         else:
             # ── RANDOM individual ─────────────────────────────────────────────
-            # Uniform random in [0,1]^5 — explores the full search space
+            # Uniform random in [0,1]^7 — explores the full search space
             gene = rng.uniform(0.0, 1.0, size=_N_GENES)
 
         population.append(gene)
@@ -818,13 +823,13 @@ def _blx_alpha_crossover(
         (the parents covered 375-525; child covers 300-600)
 
     Args:
-        parent_a : first parent chromosome [0,1]^5
-        parent_b : second parent chromosome [0,1]^5
+        parent_a : first parent chromosome [0,1]^7
+        parent_b : second parent chromosome [0,1]^7
         alpha    : blend extent factor (0.5 = extend 50% beyond parents)
         rng      : seeded random generator
 
     Returns:
-        child chromosome [0,1]^5 (clipped to valid range)
+        child chromosome [0,1]^7 (clipped to valid range)
     """
     child = np.empty(_N_GENES)
 
@@ -882,13 +887,13 @@ def _gaussian_mutate(
     └─────────────────────────────────────────────────────────┘
 
     Args:
-        gene  : chromosome to mutate [0,1]^5  (NOT modified in-place)
+        gene  : chromosome to mutate [0,1]^7  (NOT modified in-place)
         rate  : per-gene mutation probability (0.20 = 20% of genes mutate)
         sigma : Gaussian noise standard deviation in [0,1] space
         rng   : seeded random generator
 
     Returns:
-        mutated chromosome [0,1]^5 (a new array, original unchanged)
+        mutated chromosome [0,1]^7 (a new array, original unchanged)
     """
     mutated = gene.copy()  # never mutate the original in-place
 
@@ -913,7 +918,7 @@ def _gaussian_mutate(
 
 def _encode_config(cfg: Dict[str, Any]) -> Optional[np.ndarray]:
     """
-    Encode a config dict as a normalised [0,1]^5 gene vector.
+    Encode a config dict as a normalised [0,1]^7 gene vector.
 
     Returns None if any required key is missing (e.g. cold-start with no
     warm history). The formula is the inverse of _decode_individual:
@@ -944,7 +949,7 @@ def _decode_individual(
     strategy: str,
 ) -> Dict[str, Any]:
     """
-    Decode a normalised [0,1]^5 gene vector into a pipeline config dict.
+    Decode a normalised [0,1]^7 gene vector into a pipeline config dict.
 
     Decoding formula:
         real_value = real_min + gene[d] × (real_max - real_min)
@@ -1123,6 +1128,362 @@ def _run_pipeline(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Reward function
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _compute_reward_components(
+    chunks: List[Dict],
+    probes: List[str],
+    weights: Dict[str, float],
+) -> Dict[str, float]:
+    """
+    Compute the multi-objective reward for a chunk set.
+
+    Five components (all ∈ [0, 1], higher is better):
+
+    1. quality
+       ─────────
+       Combines inter-chunk separation and intra-chunk coherence.
+
+       separation = mean cosine distance between adjacent chunk hash
+                    embeddings.  High separation → boundaries are at real
+                    topic shifts, not arbitrary cuts.
+
+         separation(i, i+1) = 1 − cosine(embed(Cᵢ), embed(Cᵢ₊₁))
+
+       icc = mean intra-chunk coherence (from S4).
+             ICC(C) = mean Jaccard(sᵢ, sᵢ₊₁) over consecutive sentences.
+             High ICC → each chunk is internally coherent.
+
+       quality = 0.55 × separation + 0.45 × icc
+
+       NOTE: this is NOT the S4 boundary_score.  S4 boundary_score measures
+       similarity (high = similar = bad boundary).  separation measures
+       DISTANCE (high = different = good boundary).  They are complementary
+       but not circular — separation uses a fast hash embedding recomputed
+       here, independent of S4.
+
+    2. coverage
+       ────────
+       Measures how PRECISELY the chunk set answers each probe query.
+
+       For each probe, we find the single best-matching chunk (highest
+       token overlap).  Then we penalise it if it is too large:
+
+         precision_score = icc_of_best_chunk × (target_size / actual_size)
+                           clipped to [0, 1]
+
+       where target_size = TARGET_WORDS_PER_CHUNK.
+       A small, coherent chunk that contains the answer scores near 1.
+       A 900-word blob that buries the answer scores much lower.
+
+       This avoids the "trivially 1.0" problem of the old recall proxy.
+
+    3. consistency
+       ───────────
+       Penalises high variance in chunk sizes:
+
+         consistency = 1 − CV   where CV = std(sizes) / mean(sizes)
+
+       Low variance → the chunker found stable natural units across the
+       document (good).  High variance → some chunks are huge fragments,
+       others are tiny slivers (bad).
+
+    4. efficiency
+       ──────────
+       Rewards chunk count close to the document-derived ideal:
+
+         target_count = total_words / TARGET_WORDS_PER_CHUNK
+         efficiency   = 1 − |len(chunks) − target_count| / target_count
+
+       This directly penalises the original problem (8 chunks for a
+       6478-word document that needs ~22).
+
+    5. structural
+       ──────────
+       Domain-aware signal for legal/regulatory/financial documents:
+
+         structural = 0.5 × hard_boundary_ratio + 0.5 × mean_pmi_drop
+
+       hard_boundary_ratio : fraction of chunks starting at a protected
+                             structural marker (Article, CHAPITRE, etc.)
+       mean_pmi_drop       : mean concept shift at boundaries (from S3
+                             boundary_features dict)
+
+    Final reward
+    ────────────
+      total = w_quality × quality
+            + w_coverage × coverage
+            + w_consistency × consistency
+            + w_efficiency × efficiency
+            + 0.10 × structural          ← fixed bonus, always included
+    """
+    if not chunks:
+        return {
+            "quality": 0.0, "coverage": 0.0, "consistency": 0.0,
+            "efficiency": 0.0, "structural": 0.0, "total": -1.0,
+        }
+
+    # ── 1. quality = separation + icc ────────────────────────────────────────
+    # Inter-chunk separation: cosine distance between adjacent hash embeddings.
+    # We recompute hash embeddings here (independent of S4 scores — not circular).
+    separations: List[float] = []
+    for i in range(len(chunks) - 1):
+        v1 = _hash_embed(chunks[i].get("text", ""),     dim=128)
+        v2 = _hash_embed(chunks[i + 1].get("text", ""), dim=128)
+        n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+        if n1 > 0 and n2 > 0:
+            cos_dist = 1.0 - float(np.dot(v1, v2) / (n1 * n2))
+            separations.append(float(np.clip(cos_dist, 0.0, 1.0)))
+
+    separation = float(np.mean(separations)) if separations else 0.5
+
+    # Intra-chunk ICC from S4 (already computed per chunk)
+    icc_vals = [float(c.get("icc", 0.5)) for c in chunks]
+    mean_icc = float(np.mean(icc_vals))
+
+    quality = float(np.clip(0.55 * separation + 0.45 * mean_icc, 0.0, 1.0))
+
+    # ── 2. coverage = precision-weighted probe recall ─────────────────────────
+    coverage = _precision_recall_proxy(chunks, probes)
+
+    # ── 3. consistency = 1 - coefficient_of_variation ────────────────────────
+    sizes = np.array(
+        [max(1, len(c.get("text", "").split())) for c in chunks],
+        dtype=np.float32,
+    )
+    cv    = float(np.std(sizes) / max(float(np.mean(sizes)), 1.0))
+    consistency = float(np.clip(1.0 - cv, 0.0, 1.0))
+
+    # ── 4. efficiency = proximity to ideal chunk count ────────────────────────
+    target     = _target_count(chunks)
+    efficiency = float(
+        np.clip(1.0 - abs(len(chunks) - target) / max(target, 1.0), 0.0, 1.0)
+    )
+
+    # ── 5. structural = hard_boundary_ratio + mean PMI-drop ─────────────────
+    hard_ratio = sum(
+        1 for c in chunks
+        if c.get("boundary_type") in {"hard", "protected_structure_boundary"}
+    ) / max(len(chunks), 1)
+
+    # Read PMI-drop from the boundary_features dict that S3 populates
+    pmi_values = [
+        float(c.get("boundary_features", {}).get("pmi_drop",
+              c.get("pmi_drop", 0.5)))
+        for c in chunks
+    ]
+    mean_pmi = float(np.mean(pmi_values))
+
+    structural = float(np.clip(0.5 * hard_ratio + 0.5 * mean_pmi, 0.0, 1.0))
+
+    # ── 6. Mid-sentence penalty (subtract from total) ────────────────────────
+    # Penalise any chunk that starts mid-sentence (lowercase first char that
+    # is not a legal list marker).  This directly penalises the BO for finding
+    # n_max values that cause recursive/paragraph_pack to cut inside sentences.
+    # Each mid-sentence start deducts 0.04 from the total reward.
+    mid_sentence_count = sum(
+        1 for c in chunks
+        if (c.get("text", "").strip()[:1].islower()
+            and not re.match(r"^\d+\)", c.get("text", "").strip())
+            and not re.match(r"^[a-z][-\)]\s", c.get("text", "").strip()))
+    )
+    mid_sentence_penalty = float(
+        np.clip(mid_sentence_count * 0.04, 0.0, 0.20)
+    )
+
+    # ── Total ────────────────────────────────────────────────────────────────
+    total = (
+        weights["quality"]       * quality
+        + weights["coverage"]    * coverage
+        + weights["consistency"] * consistency
+        + weights["efficiency"]  * efficiency
+        + 0.10                   * structural       # fixed domain-structure bonus
+        - mid_sentence_penalty                      # penalise mid-sentence cuts
+    )
+
+    return {
+        "quality":              round(quality,              4),
+        "coverage":             round(coverage,             4),
+        "consistency":          round(consistency,          4),
+        "efficiency":           round(efficiency,           4),
+        "structural":           round(structural,           4),
+        "mid_sentence_penalty": round(mid_sentence_penalty, 4),
+        "total":                round(float(np.clip(total, 0.0, 1.0)), 4),
+    }
+
+
+def _objective_weights(config: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Parse user-configured objective weights from the config dict.
+
+    Defaults:
+      quality=0.35, coverage=0.25, consistency=0.20, efficiency=0.20
+
+    The weights are normalised so they always sum to 1.0.  This means
+    the user can supply any positive values and they will be rescaled.
+    """
+    defaults = {
+        "quality":     0.35,
+        "coverage":    0.25,
+        "consistency": 0.20,
+        "efficiency":  0.20,
+    }
+    incoming = config.get("reward_objectives", {})
+    if not isinstance(incoming, dict):
+        incoming = {}
+    raw = {k: float(incoming.get(k, v)) for k, v in defaults.items()}
+    s   = sum(raw.values()) or 1.0
+    return {k: v / s for k, v in raw.items()}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Probe generation & coverage evaluation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_probes(text: str, n: int = 10) -> List[str]:
+    """
+    Generate probe queries from document structure for the coverage metric.
+
+    Strategy (priority order):
+    1. Legal/structural headings: Article N, CHAPITRE N, TITRE N
+       These are the most semantically precise anchors in legal documents.
+    2. Markdown headings (# Title) — for technical and academic documents.
+    3. Numbered section lines (1.1, 2.3.4 …) — for regulatory/policy docs.
+    4. First sentence of each paragraph (≥ 8 words) — universal fallback.
+
+    Each probe is a short natural-language phrase that a retrieval system
+    might use to query the chunk set.  The coverage metric measures whether
+    the best-matching chunk is small and coherent, not just whether it exists.
+    """
+    probes: List[str] = []
+
+    # ── 1. Legal article/section headings ───────────────────────────────────
+    for m in re.finditer(
+        r"(?im)^\s*((?:Article|Art\.?|ARTICLE|CHAPITRE|TITRE|SECTION)\s+\w+[^\n]{0,60})",
+        text,
+    ):
+        probe = m.group(1).strip()
+        if 3 <= len(probe.split()) <= 12:
+            probes.append(probe)
+        if len(probes) >= n:
+            return probes
+
+    # ── 2. Markdown headings ─────────────────────────────────────────────────
+    for m in re.finditer(r"^#{1,3}\s+(.+)$", text, re.MULTILINE):
+        probe = m.group(1).strip()
+        if 2 <= len(probe.split()) <= 12:
+            probes.append(probe)
+        if len(probes) >= n:
+            return probes
+
+    # ── 3. Numbered section lines ────────────────────────────────────────────
+    for m in re.finditer(r"(?m)^\s*(\d+(?:\.\d+)+)\s+(.+)$", text):
+        probe = (m.group(1) + " " + m.group(2)).strip()
+        if len(probe.split()) >= 3:
+            probes.append(probe[:100])
+        if len(probes) >= n:
+            return probes
+
+    # ── 4. First sentence of paragraphs (fallback) ───────────────────────────
+    for para in re.split(r"\n{2,}", text):
+        p = para.strip()
+        if not p:
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+", p)
+        if sentences and len(sentences[0].split()) >= 8:
+            probes.append(sentences[0].strip()[:120])
+        if len(probes) >= n:
+            break
+
+    return probes[:n]
+
+
+def _precision_recall_proxy(chunks: List[Dict], probes: List[str]) -> float:
+    """
+    Precision-weighted coverage metric.
+
+    For each probe query:
+      1. Find the chunk with the highest token overlap with the probe.
+      2. Score:  precision = overlap_ratio × size_penalty
+         where:
+           overlap_ratio = |probe_terms ∩ chunk_terms| / |probe_terms|
+           size_penalty  = min(1.0, TARGET_WORDS_PER_CHUNK / chunk_words)
+
+    WHY ICC WAS REMOVED
+    ───────────────────
+    The original multiplied by chunk_icc, creating a hard ceiling at mean_icc
+    ≈ 0.18 for legal documents.  Every strategy scored ≤ 0.18 regardless of
+    actual retrieval quality — coverage was useless as a discriminating signal.
+
+    ICC is already captured in the `quality` reward component.  Including it
+    in coverage too double-penalised low-ICC chunks and made the two components
+    correlated.  Coverage now measures purely: "can this chunk set answer the
+    probe?" — independent of internal coherence.
+    """
+    if not probes:
+        return 0.5
+
+    target = float(_TARGET_WORDS_PER_CHUNK)
+    scores: List[float] = []
+
+    for probe in probes:
+        probe_terms = set(re.findall(r"\b\w{3,}\b", probe.lower()))
+        if not probe_terms:
+            scores.append(0.5)
+            continue
+
+        best_score = 0.0
+        for chunk in chunks:
+            chunk_tokens = set(re.findall(r"\b\w+\b", chunk.get("text", "").lower()))
+            overlap      = len(probe_terms & chunk_tokens)
+            if overlap == 0:
+                continue
+
+            overlap_ratio = overlap / len(probe_terms)
+            chunk_words   = max(1, len(chunk.get("text", "").split()))
+            size_penalty  = min(1.0, target / chunk_words)
+
+            # ICC deliberately excluded — it is already in the quality component
+            precision  = float(np.clip(overlap_ratio * size_penalty, 0.0, 1.0))
+            best_score = max(best_score, precision)
+
+        scores.append(best_score)
+
+    return float(np.mean(scores)) if scores else 0.5
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Utility helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _target_count(chunks: List[Dict]) -> float:
+    """
+    Ideal chunk count = total document words / TARGET_WORDS_PER_CHUNK.
+    Clamped to at least 3 to avoid degenerate single-chunk edge cases.
+    """
+    total_words = sum(max(1, len(c.get("text", "").split())) for c in chunks)
+    return max(3.0, total_words / _TARGET_WORDS_PER_CHUNK)
+
+
+def _hash_embed(text: str, dim: int = 128) -> np.ndarray:
+    """
+    Lightweight bag-of-words hash embedding.
+
+    Maps each content token to a position in a dim-dimensional vector via
+    Python's built-in hash function, accumulates counts, and L2-normalises.
+
+    Used ONLY for the separation component of the quality reward so that
+    it is independent of S4/S6 scores (no circular reward feedback).
+    """
+    vec = np.zeros(dim, dtype=np.float32)
+    for tok in re.findall(r"\b\w{3,}\b", text.lower()):
+        vec[hash(tok) % dim] += 1.0
+    n = np.linalg.norm(vec)
+    return vec / n if n > 0 else vec
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Persistence: warm-start across documents of the same domain
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1159,9 +1520,11 @@ def _warm_start_config(
     record = history.get(domain, {})
 
     # All tunable parameters — same as the search space in _suggest_config
-    tunable_keys = (  # the 5 live genes (see _GENE_SPECS)
-        "n_max", "n_min", "tau_sem",
-        "q_entropy_param", "min_chunk_tokens",
+    tunable_keys = (
+        "tau_jsd_low", "tau_jsd_high",
+        "n_max", "n_min",
+        "tau_sem",
+        "tau_percentile_low", "tau_percentile_high",
     )
 
     for k in tunable_keys:
@@ -1195,9 +1558,11 @@ def _save_history(
     """
     history = _load_history()
 
-    tunable_keys = (  # the 5 live genes (see _GENE_SPECS)
-        "n_max", "n_min", "tau_sem",
-        "q_entropy_param", "min_chunk_tokens",
+    tunable_keys = (
+        "tau_jsd_low", "tau_jsd_high",
+        "n_max", "n_min",
+        "tau_sem",
+        "tau_percentile_low", "tau_percentile_high",
     )
 
     best_params = {k: config.get(k) for k in tunable_keys if config.get(k) is not None}

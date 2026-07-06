@@ -704,31 +704,29 @@ def _suggest_hyperparams(
         # Table rows should stay together; allow small minimum
         n_min = max(15, n_min // 2)
 
-    # ── Adjust JSD thresholds based on measured coherence (ICC) ──────────────
-    tau_low  = float(config.get("tau_jsd_low",  0.15))
-    tau_high = float(config.get("tau_jsd_high", 0.45))
-    rc  = metrics.get("RC",  0.5)
+    # ── Suggest the qentropy genes from measured coherence (ICC) / structure ──
+    # (The old JSD/percentile thresholds were removed in the S3 qentropy rewrite;
+    #  S3 now reads q_entropy_param + min_chunk_tokens, so we suggest those.)
     icc = metrics.get("ICC", 0.5)
 
-    if icc > 0.60:
-        # High sentence-level cohesion → raise the merge bar (be stricter)
-        tau_low = max(0.08, tau_low - 0.05)
-    elif icc < 0.30:
-        # Low cohesion → lower the merge bar (merge less aggressively)
-        tau_low = min(0.25, tau_low + 0.05)
+    # Tsallis q starting point: q=1 is Shannon.  Low sentence cohesion → push q
+    # below 1 (finer, keeps weak shifts); high cohesion → keep q near Shannon.
+    q_start = float(config.get("q_entropy_param", 1.0))
+    if icc < 0.30:
+        q_start = -0.5      # incoherent text → finer segmentation
+    elif icc < 0.50:
+        q_start = 0.5
 
-    if rc > 0.80:
-        # Strong structure signal → tighten the hard-split threshold so that
-        # structural markers are captured more readily
-        tau_high = max(0.30, tau_high - 0.05)
+    # qentropy feasibility floor: smaller for code/table (short units)
+    min_chunk_tokens = 12 if doc_type in {"code", "table"} else 20
 
     # Build the suggestion dict
     suggested = {
-        "n_min":        n_min,
-        "n_max":        n_max,
-        "tau_jsd_low":  round(tau_low,  3),
-        "tau_jsd_high": round(tau_high, 3),
-        "tau_sem":      float(config.get("tau_sem", 0.75)),
+        "n_min":            n_min,
+        "n_max":            n_max,
+        "q_entropy_param":  q_start,
+        "min_chunk_tokens": min_chunk_tokens,
+        "tau_sem":          float(config.get("tau_sem", 0.75)),
     }
 
     # ── Propagate into live config (only for keys the user did not set) ───────

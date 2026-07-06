@@ -75,6 +75,7 @@ High ICC → the sentences WITHIN the chunk are topically coherent.
 ICC is used by S7 as a quality signal in the reward function.
 """
 
+import math
 import re
 from collections import Counter
 from typing import Any, Dict, List, Optional
@@ -131,6 +132,46 @@ def filter_boundaries(
     n_max       = int(config.get("n_max", 500))              # max tokens per chunk
     merge_weight = float(config.get("boundary_merge_weight", 1.0))  # global scale on score
 
+    # S4 semantic-similarity mode: "cosine" (classical, the old way) or
+    # "qcosine" (the Fitouhi–Bouzeffour q-cosine of the inter-chunk angle, base = q²).
+    # When s4_similarity is explicitly supplied the merge is gated directly on
+    # the (q-)cosine similarity vs τ_sem — the kernel actually drives the merge.
+    # When it is absent we keep the legacy composite-score gate untouched, so
+    # earlier experiments / tables that never set the flag are reproduced exactly.
+    kernel_gate = "s4_similarity" in config
+    sim_mode = str(config.get("s4_similarity", "cosine")).lower()
+    if sim_mode not in {"cosine", "qcosine"}:
+        sim_mode = "cosine"
+    q_param = float(config.get("q_entropy_param", 1.0))
+
+    # Entropy-gated q-cosine (experimental, OFF by default): couple the kernel's
+    # deformation to S3's per-boundary strength (chunk["boundary_signal"]).  A
+    # global q + hard threshold is just cosine at a shifted τ; making the base
+    # boundary-local is the only way the q-cosine can express a merge rule cosine
+    # cannot.  In practice this was found NEUTRAL-to-slightly-worse on the corpus
+    # (boundary_signal and the adjacent cosine are correlated, so the coupling is
+    # largely redundant), hence it defaults off.  Reduces to the plain global
+    # q-cosine when disabled or when every boundary signal is equal.
+    couple_local = bool(config.get("s4_qcos_couple", False))
+    _sigs = [float(c.get("boundary_signal", 0.0)) for c in chunks]
+    _max_sig = max(_sigs) if any(s > 1e-9 for s in _sigs) else 1.0
+
+    # q-cosine VALLEY mechanism (experimental): instead of a pairwise hard gate,
+    # score each boundary relative to its neighbours so the kernel detects genuine
+    # similarity valleys (topic breaks) rather than absolute similarity.  This is
+    # non-monotone in a single cosine, and the neighbour averaging of the
+    # nonlinear q-cosine carries a q-dependent Jensen gap, so q matters beyond a
+    # threshold shift.  λ=0 ⇒ the plain pairwise gate.  Precompute the static
+    # consecutive q-cosine sequence over the INPUT chunks (independent of merges).
+    window_mech = bool(config.get("s4_qcos_window", False)) and sim_mode == "qcosine"
+    qcos_lambda = float(config.get("s4_qcos_lambda", 0.5))
+    qcos_seq = None
+    if window_mech:
+        qcos_seq = [0.0] * len(chunks)
+        for j in range(1, len(chunks)):
+            raw_j = _semantic_score(chunks[j - 1]["text"], chunks[j]["text"], embeddings, j)
+            qcos_seq[j] = _q_cosine_similarity(raw_j, q_param)
+
     # Initialise output list with the first chunk (no left neighbour to compare)
     result: List[Dict] = [dict(chunks[0])]
     result[0]["boundary_score"]    = 0.0   # first chunk has no left boundary
@@ -161,7 +202,23 @@ def filter_boundaries(
         structural = _structural_continuity_score(prev["text"], curr["text"], doc_type)
 
         # Semantic: embedding cosine if available, else hash-embedding cosine
-        semantic   = _semantic_score(prev["text"], curr["text"], embeddings, idx)
+        semantic_cos = _semantic_score(prev["text"], curr["text"], embeddings, idx)
+
+        # q-analog of cosine similarity (instructor's q² convention).  In
+        # "qcosine" mode the raw cosine is replaced by the Fitouhi–Bouzeffour q-cosine of the
+        # inter-chunk angle; in "cosine" mode the classical value is kept verbatim.
+        if sim_mode == "qcosine":
+            if couple_local:
+                # base_i interpolates between q² (strong S3 boundary → conservative)
+                # and 1 (weak boundary → plain cosine).  curr's boundary_signal is
+                # the shift that opened the boundary between prev and curr.
+                s_i = min(1.0, max(0.0, float(curr.get("boundary_signal", 0.0)) / _max_sig))
+                base_i = 1.0 - (1.0 - q_param * q_param) * s_i
+                semantic = _q_cos_sim_base(semantic_cos, base_i)
+            else:
+                semantic = _q_cosine_similarity(semantic_cos, q_param)
+        else:
+            semantic = semantic_cos
 
         # Multi-scale: lexical score at windows 1, 2, 3 chunks wide
         multiscale = _multi_scale_boundary_score(chunks, idx, doc_type)
@@ -189,16 +246,27 @@ def filter_boundaries(
             "token_type":  round(float(token_type),    4),
             "structural":  round(float(structural),    4),
             "semantic":    round(float(semantic),      4),
+            "semantic_cos": round(float(semantic_cos), 4),
             "multiscale":  round(float(multiscale),    4),
             "weighted":    round(float(decision_score), 4),
+            "sim_mode":    sim_mode,
         }
 
         # ── Merge decision ────────────────────────────────────────────────
-        # Merge if: score > τ_sem (very similar) AND combined size fits
+        # Kernel gate (s4_similarity set): merge when the (q-)cosine similarity
+        # of the two chunks exceeds τ_sem — this is the criterion the kernel
+        # controls.  Legacy gate (flag absent): the composite lexical+structural
+        # score vs τ_sem, exactly as before.  Both require the size guard.
         prev_wc = len(prev["text"].split())
         curr_wc = len(curr["text"].split())
+        gate_value = semantic if kernel_gate else decision_score
+        if window_mech and qcos_seq is not None:
+            # Static neighbour-relative valley score over the input adjacency.
+            neigh = [qcos_seq[k] for k in (idx - 1, idx + 1) if 0 < k < len(chunks)]
+            nmean = (sum(neigh) / len(neigh)) if neigh else qcos_seq[idx]
+            gate_value = (1.0 + qcos_lambda) * qcos_seq[idx] - qcos_lambda * nmean
 
-        if decision_score > tau_sem and (prev_wc + curr_wc) <= n_max * 1.5:
+        if gate_value > tau_sem and (prev_wc + curr_wc) <= n_max * 1.5:
             # Merge: absorb curr into the previous chunk in result[]
             result[-1]["text"]               = prev["text"] + "\n\n" + curr["text"]
             result[-1]["end"]                = curr.get("end", prev.get("end", 0))
@@ -631,6 +699,94 @@ def _split_units(text: str) -> List[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Low-level helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# q-analog of cosine similarity  —  the Fitouhi–Bouzeffour q-cosine
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Reference: A. Fitouhi & F. Bouzeffour, "The q-cosine Fourier transform and the
+# q-heat equation", Ramanujan J. 28 (2012) 443–461, eqs. (5)–(6).  (This is the
+# Koornwinder–Swarttouw q-cosine adopted there; it is NOT Jackson's cos_q / sin_q,
+# which the paper explicitly distinguishes.)  Classical cosine similarity of two
+# embeddings is cos(θ), the cosine of the angle θ between them.  The q-deformed
+# analog replaces the ordinary cosine by the Fitouhi–Bouzeffour q-cosine
+#
+#     cos(x; q²) = ₁φ₁(0; q; q², (1-q)² x²) = Σ_{n≥0} (-1)ⁿ bₙ(x; q²),      (eq. 5)
+#     bₙ(x; q²) = bₙ(1; q²) x^{2n} = q^{n(n-1)} (1-q)^{2n} / (q;q)_{2n} · x^{2n}, (eq. 6)
+#
+# where (q;q)_m = Π_{k=1}^m (1-q^k) is the q-Pochhammer symbol and 0 < q < 1.
+# As q→1 the coefficient q^{n(n-1)}(1-q)^{2n}/(q;q)_{2n} → 1/(2n)! and
+# cos(x; q²) → cos(x), so the classical cosine is recovered continuously (this
+# matches the paper's bound |bₙ(1;q²)| ≤ 1/(2n)!, Prop. 3.1).
+#
+# Instructor's convention (the "q is squared" point): the fundamental base in the
+# coefficient (eq. 6) is taken as q².  The pipeline's Tsallis parameter lives in
+# [-1,1] and may be negative — outside the paper's domain 0<q<1.  Squaring it maps
+# [-1,1] → [0,1], so the series is well defined for every pipeline q; we therefore
+# evaluate eq. (6) with base = q².
+
+def _q_pochhammer(base: float, m: int) -> float:
+    """q-Pochhammer (base; base)_m = Π_{k=1}^m (1 - base^k).  (m=0 → 1.)"""
+    prod = 1.0
+    p = base  # base^1
+    for _ in range(m):
+        prod *= (1.0 - p)
+        p *= base
+    return prod
+
+
+def _q_cosine(x: float, base: float, terms: int = 24) -> float:
+    """
+    Fitouhi–Bouzeffour q-cosine cos(x; q²) evaluated from its power series (see header).
+    ``base`` is q² ∈ [0,1].  The series is entire in x and converges fast
+    because q^{n(n-1)} decays super-geometrically.
+    """
+    # base → 1 is the classical limit; the series is 0/0 there, so use cos(x).
+    if base >= 1.0 - 1e-9:
+        return math.cos(x)
+    # base → 0: only n=0,1 survive (q^{n(n-1)}=0 for n≥2) → cos(x; 0) = 1 - x².
+    if base <= 1e-12:
+        return 1.0 - x * x
+    total = 0.0
+    for n in range(terms):
+        poch = _q_pochhammer(base, 2 * n)      # (base;base)_{2n}
+        if poch == 0.0:
+            break
+        bn = (base ** (n * (n - 1))) * ((1.0 - base) ** (2 * n)) / poch
+        term = ((-1.0) ** n) * bn * (x ** (2 * n))
+        total += term
+        if n > 2 and abs(term) < 1e-15:
+            break
+    return total
+
+
+def _q_cosine_similarity(cos_val: float, q: float, terms: int = 24) -> float:
+    """
+    q-analog of cosine similarity: the Fitouhi–Bouzeffour q-cosine evaluated at the
+    inter-chunk angle, used in place of the ordinary cosine.
+
+    cos_val : ordinary cosine similarity of the two embeddings, in [-1,1].
+    q       : pipeline Tsallis parameter; deformation base = q² ∈ [0,1].
+
+    Returns clip( cos(θ; q²), -1, 1 ) with θ = arccos(cos_val).  Because
+    cos(θ; q²) → cos(θ) as the base → 1, at |q|=1 this is EXACTLY the ordinary
+    cosine, so the q-cosine kernel reduces to the classical one at the spectrum
+    endpoints.  For |q|<1 the kernel is more conservative — a higher ordinary
+    cosine is required to reach the same q-similarity (cos(θ;0)=1-θ²) — so
+    q-cosine merging keeps finer boundaries.  It is monotonically decreasing in
+    the angle for every q, so the "high = similar = merge" ordering is preserved.
+    """
+    return _q_cos_sim_base(cos_val, float(q) * float(q), terms)
+
+
+def _q_cos_sim_base(cos_val: float, base: float, terms: int = 24) -> float:
+    """Core q-cosine similarity for an explicit base ∈ [0,1] (see header).
+    base=1 ⇒ ordinary cosine; smaller base ⇒ more conservative (resists merging)."""
+    c = max(-1.0, min(1.0, float(cos_val)))
+    theta = math.acos(c)
+    qc = _q_cosine(theta, max(0.0, min(1.0, float(base))), terms)
+    return float(max(-1.0, min(1.0, qc)))
+
 
 def _cosine_similarity(v1: List[float], v2: List[float]) -> float:
     """

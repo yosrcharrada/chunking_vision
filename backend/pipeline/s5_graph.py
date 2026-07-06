@@ -164,8 +164,16 @@ class KGStore:
         return int(self.entity_cooccurrence.get(a, {}).get(b, 0))
 
 
-# Module-level KGStore singleton (loaded once, persists across the request lifetime)
-_kg_store = KGStore()
+# Module-level KGStore singleton, lazily initialised so that merely importing
+# s5_graph (e.g. from S7) does not touch the filesystem at import time.
+_kg_store: Optional["KGStore"] = None
+
+
+def _get_kg_store() -> "KGStore":
+    global _kg_store
+    if _kg_store is None:
+        _kg_store = KGStore()
+    return _kg_store
 
 
 # Supported spaCy model names per language code.
@@ -367,7 +375,7 @@ def enrich_graph(
             # This makes the graph richer on subsequent runs of the same domain
             for ei in {e["canonical"] for e in enriched[i].get("entities", [])}:
                 for ej in {e["canonical"] for e in enriched[j].get("entities", [])}:
-                    prior = _kg_store.get_prior_weight(ei, ej)
+                    prior = _get_kg_store().get_prior_weight(ei, ej)
                     if prior > 0:
                         pair = (i, j)
                         edge_counts[pair] += prior
@@ -401,9 +409,9 @@ def enrich_graph(
     for i, chunk in enumerate(enriched):
         cid           = f"{job_id}::C{i}"   # unique ID: job_id + chunk index
         entity_texts  = [e["canonical"] for e in chunk.get("entities", [])]
-        _kg_store.add_chunk_entities(cid, entity_texts)
+        _get_kg_store().add_chunk_entities(cid, entity_texts)
 
-    _kg_store.save()   # persist to disk for future runs
+    _get_kg_store().save()   # persist to disk for future runs
 
     return enriched
 

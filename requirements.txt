@@ -20,4 +20,5 @@ scikit-learn>=1.3.0          # engine.embeddings TF-IDF fallback
 sentence-transformers>=2.2.2  # local multilingual / english backends
 torch>=2.0.0                  # sentence-transformers backend
 tiktoken>=0.5.0               # token counting (engine.embeddings)
-openai>=1.0.0                 # optional: embeddings + QA gen + answerability judge
+openai>=1.0.0                 # optional: embeddings + QA gen + answerability judge (OpenAI or Azure/EY)
+python-dotenv>=1.0.0          # optional: load .env (OPENAI_ENDPOINT etc.) at startup
