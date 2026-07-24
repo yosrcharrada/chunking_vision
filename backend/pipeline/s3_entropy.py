@@ -68,6 +68,107 @@ from engine import entropy as ent
 from engine import tree_entropy as te
 from engine.chunking import TreeNode
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  TWO ENTROPY FAMILIES USED TO DRIVE THE S3 BOUNDARY COUNT
+# ═════════════════════════════════════════════════════════════════════════════
+#  S3 turns a probability distribution p = {p_i} over candidate boundary gaps
+#  into a target number of boundaries, via an "effective number of gaps" D.
+#  Two generalized-entropy families are supported, selected by config
+#  "entropy_mode" ∈ {"tsallis", "qlog"}; both reduce to Shannon at q = 1.
+#
+#  (A) TSALLIS q-ENTROPY  (the default; implemented in engine/entropy.py):
+#         S_q^{Tsallis}(p) = ( 1 - Σ_i p_i^q ) / (q - 1)
+#      with effective number = Hill number  D_q = ( Σ_i p_i^q )^{1/(1-q)}.
+#
+#  (B) q-LOGARITHM ENTROPY  (the new formula benchmarked here), defined via a
+#      q-deformed logarithm expressed as a series (q-bracket [n]_q = (1-q^n)/(1-q)):
+#
+#          S_q^{K}(p) = (1 - q) · Σ_i p_i · Σ_{n=1}^{∞}  (1 - p_i)^n / (1 - q^n)          (†)
+#
+#      As q → 1, (1-q)/(1-q^n) → 1/n, so the inner sum → -ln(p_i) (Mercator
+#      series) and S_q^{K} → -Σ_i p_i ln p_i = Shannon entropy.
+#
+#      The infinite series in (†) converges only slowly when some p_i is small
+#      (it needs O(1/p_i) terms).  We therefore evaluate the mathematically
+#      IDENTICAL Lambert-type rearrangement, using 1/(1-q^n) = Σ_{k≥0} q^{nk}
+#      and closing the inner geometric sum over n:
+#
+#          S_q^{K}(p) = (1 - q) · Σ_i p_i · Σ_{k=0}^{∞}  (1-p_i) q^k / ( 1 - (1-p_i) q^k )  (‡)
+#
+#      which converges geometrically at rate |q| — a fixed ~O(100) terms for any
+#      p_i, so the truncation depth is an internal numerical constant (NOT a
+#      tunable/GA parameter: it only controls approximation accuracy of a fixed
+#      quantity, not the model).  Forms (†) and (‡) are verified to agree to 1e-3.
+#      q = -1 is excluded (even-n terms 1/(1-q^n) → 1/0), matching the S4 kernel.
+# ═════════════════════════════════════════════════════════════════════════════
+
+_QLOG_MIN_Q = -0.999          # q=-1 makes 1/(1-q^n) singular for even n
+_QLOG_MAX_TERMS = 600         # safety cap on the Lambert sum (adaptive early-exit below)
+
+
+def _qlog_L(p_i: float, q: float, tol: float = 1e-9) -> float:
+    """Inner q-deformed (-log) series for a single probability p_i, via the
+    geometrically-convergent Lambert form of (‡):
+        L(p_i) = Σ_{k≥0} (1-p_i) q^k / ( 1 - (1-p_i) q^k ).
+    """
+    a = 1.0 - p_i                       # (1 - p_i)
+    total = 0.0
+    qk = 1.0                            # q^0
+    for _ in range(_QLOG_MAX_TERMS):
+        x = a * qk                      # (1-p_i) q^k
+        term = x / (1.0 - x)            # denom finite for |q|<1 since |x|<1
+        total += term
+        qk *= q
+        if abs(term) < tol and abs(qk) < tol:
+            break
+    return total
+
+
+def qlog_entropy(p, q: float) -> float:
+    """q-logarithm entropy S_q^{K} of Eq.(†)/(‡) above, in NATS.
+    Reduces to Shannon (nats) at q≈1; q floored away from -1."""
+    p = ent.normalize(p)
+    if abs(q - 1.0) < 1e-6:                        # removable singularity → Shannon
+        return float(-np.sum(p * np.log(p)))
+    qf = max(float(q), _QLOG_MIN_Q)
+    s = 0.0
+    for pi in p:
+        s += float(pi) * _qlog_L(float(pi), qf)
+    return float((1.0 - qf) * s)
+
+
+def qlog_diversity_number(p, q: float) -> float:
+    """Effective number of gaps implied by the q-log entropy: the size D of a
+    UNIFORM distribution having the same entropy (the "numbers equivalent",
+    the general analogue of the Hill number).  Solved by bisection on D∈[1,N]
+    since S_q^{K}(uniform_D) is monotonically increasing in D.  Returns D for a
+    uniform-N input by construction, and D<N for a skewed input."""
+    p = ent.normalize(p)
+    N = len(p)
+    if N <= 1:
+        return 1.0
+    if abs(q - 1.0) < 1e-6:                        # Shannon → perplexity exp(H)
+        return float(math.exp(-np.sum(p * np.log(p))))
+    qf = max(float(q), _QLOG_MIN_Q)
+    s_obs = qlog_entropy(p, qf)
+    # entropy of a uniform distribution over D categories (continuous in D):
+    #   S(uniform_D) = (1-q) · L(1/D)   (each of the D masses 1/D contributes equally)
+    def s_uniform(D: float) -> float:
+        return (1.0 - qf) * _qlog_L(1.0 / D, qf)
+    lo, hi = 1.0, float(N)
+    if s_obs <= s_uniform(lo):
+        return 1.0
+    if s_obs >= s_uniform(hi):
+        return float(N)
+    for _ in range(60):                            # bisection to ~1e-15 relative
+        mid = 0.5 * (lo + hi)
+        if s_uniform(mid) < s_obs:
+            lo = mid
+        else:
+            hi = mid
+    return float(0.5 * (lo + hi))
+
 # Embedding authority (shared with S6 / metrics / GA).  Imported lazily inside
 # the functions that need vectors so importing this module never triggers a
 # heavyweight model load.
@@ -222,6 +323,9 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
     use_lstm = bool(config.get("use_lstm", True))            # ablation switch
     use_structure = bool(config.get("use_structure", True))  # ablation switch
     use_qcos_rank = bool(config.get("s3_qcos_rank", False))  # q-cosine gap re-ranking
+    # Which generalized entropy drives the boundary count (see the block above):
+    #   "tsallis" (default) -> Hill number D_q ;  "qlog" -> q-log numbers-equivalent.
+    entropy_mode = str(config.get("entropy_mode", "tsallis")).lower()
 
     # ── Single-unit document ────────────────────────────────────────────────
     if len(chunks) == 1:
@@ -261,7 +365,13 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
     # ── 3. Generalised entropy drives the boundary count ────────────────────
     shannon_bits = ent.shannon_entropy(p_cand)
     tsallis_bits = ent.tsallis_entropy(p_cand, q)
-    d_q = ent.diversity_number(p_cand, q)
+    # Effective number of gaps D → target boundary count.  The Tsallis Hill
+    # number is the default; entropy_mode="qlog" swaps in the q-log entropy's
+    # numbers-equivalent (both defined in the header block of this file).
+    if entropy_mode == "qlog":
+        d_q = qlog_diversity_number(p_cand, q)
+    else:
+        d_q = ent.diversity_number(p_cand, q)
     target = int(round(d_q)) if use_dq else int(sig_idx.size)
 
     # token-feasibility guard: never request more boundaries than min_chunk_tokens

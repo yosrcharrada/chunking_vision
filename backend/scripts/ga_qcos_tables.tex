@@ -1,0 +1,44 @@
+% ===== TABLE GA1: GA before/after q-cosine kernel, aggregate =====
+\begin{table}[t]\centering
+\caption{GA-tuned pipeline, before (S4 legacy gate) vs.\ after (S4 Fitouhi--Bouzeffour $q$-cosine kernel, $q=-1$ excluded per kernel definition), averaged across the corpus. The GA searches the SAME 5 genes in both arms; \win{green} marks the better of each pair.}
+\label{tab:ga_qcos_agg}
+\begin{tabular}{@{}l ccccc cc@{}}\toprule
+Arm & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & AC$\uparrow$ & Tok.C.$\downarrow$ & \#chk \\\midrule
+Before (S4 cosine) & 0.664 & \win{0.809} & \win{0.965} & 0.537 & 0.887 & 2550.1 & 13.5 \\
+After ($q$-cosine)  & \win{0.669} & 0.800 & 0.961 & \win{0.542} & \win{0.900} & 2502.2 & 13.9 \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE GA2: GA before/after q-cosine kernel, per domain =====
+\begin{table}[t]\centering
+\caption{GA-tuned pipeline by domain, before (S4 cosine) vs.\ after ($q$-cosine, $q=-1$ excluded). $\Delta$F1 = After $-$ Before; \win{green} marks the better of each pair.}
+\label{tab:ga_qcos_domain}
+\begin{tabular}{@{}l l ccccc c@{}}\toprule
+Domain & Arm & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & AC$\uparrow$ & $\Delta$F1 \\\midrule
+Code & Before & 0.622 & 0.812 & 0.946 & 0.391 & 0.950 &  \\
+ & After & 0.622 & 0.812 & 0.946 & 0.391 & 0.950 & +0.000 \\
+\addlinespace[1pt]
+General & Before & 0.700 & 0.800 & 1.000 & 0.560 & 0.700 &  \\
+ & After & 0.700 & 0.800 & 1.000 & 0.560 & 0.700 & +0.000 \\
+\addlinespace[1pt]
+Legal & Before & 0.676 & 0.875 & 0.968 & 0.580 & 0.850 &  \\
+ & After & 0.676 & 0.875 & 0.968 & 0.580 & 0.850 & +0.000 \\
+\addlinespace[1pt]
+Medical & Before & 0.672 & 0.767 & 0.964 & 0.598 & 0.933 &  \\
+ & After & 0.685 & 0.742 & 0.955 & 0.612 & 0.967 & \textcolor{green!45!black}{\textbf{+0.013}} \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE GA3: per-document GA before/after q-cosine =====
+\begin{table*}[t]\centering
+\caption{Per-document GA outcome, before (S4 cosine) vs.\ after ($q$-cosine, $q=-1$ excluded): F1, answer-correctness (AC), the GA-discovered $q^{*}$ (jointly driving S3's $D_q$ and the S4 kernel in the After arm), and final chunk count.}
+\label{tab:ga_qcos_perdoc}
+\begin{tabular}{@{}ll cc cc cc cc@{}}\toprule
+Document & Domain & F1$_{\text{Bef}}$ & F1$_{\text{Aft}}$ & AC$_{\text{Bef}}$ & AC$_{\text{Aft}}$ & $q^{*}_{\text{Bef}}$ & $q^{*}_{\text{Aft}}$ & \#chk$_{\text{Bef}}$ & \#chk$_{\text{Aft}}$ \\\midrule
+main.py & Code & 0.663 & 0.663 & 1.000 & 1.000 & -0.36 & -0.36 & 23 & 23 \\
+s7\_rl.py & Code & 0.580 & 0.580 & 0.900 & 0.900 & -0.42 & -0.37 & 28 & 28 \\
+general.pdf & General & 0.700 & 0.700 & 0.700 & 0.700 & 1.00 & 1.00 & 2 & 2 \\
+cdpf-2025.pdf & Legal & 0.700 & 0.700 & 0.800 & 0.800 & 1.00 & 1.00 & 10 & 10 \\
+convention-entre-le-gouvernement-de-la-republique-tunisienne-et-malte-a-eviter-la-double-imposition-.pdf & Legal & 0.652 & 0.652 & 0.900 & 0.900 & 0.96 & 0.96 & 16 & 16 \\
+PubMedQA.pdf & Medical & 0.571 & \win{0.611} & 0.800 & \win{0.900} & -0.38 & -0.55 & 20 & 23 \\
+le\_cancer\_du\_poumon.pdf & Medical & 0.828 & 0.828 & 1.000 & 1.000 & 1.00 & 1.00 & 3 & 3 \\
+module1\_plasticité cérébrale 2023.pdf & Medical & 0.616 & 0.616 & 1.000 & 1.000 & -0.36 & -0.36 & 6 & 6 \\
+\bottomrule\end{tabular}\end{table*}

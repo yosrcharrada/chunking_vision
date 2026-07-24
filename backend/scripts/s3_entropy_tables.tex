@@ -1,0 +1,54 @@
+% ===== TABLE E1: S3 entropy A/B, per-q aggregate =====
+\begin{table}[t]\centering
+\caption{S3 boundary-count entropy: Tsallis $q$-entropy vs.\ the $q$-logarithm entropy (Eq.~\ref{eq:qlogentropy}), per Tsallis $q$, averaged across the 8-document corpus. S1--S2 and S4 are held identical; only the S3 entropy that sets the boundary count differs. \win{green} marks the better F1 of each pair.}
+\label{tab:s3ent_byq}
+\begin{tabular}{@{}c l ccccc c@{}}\toprule
+$q$ & Entropy & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & AC$\uparrow$ & \#chk \\\midrule
+$-0.5$ & Tsallis & 0.693 & 0.902 & 0.938 & 0.561 & 0.875 & 41.8 \\
+ & $q$-log & \win{0.695} & 0.900 & 0.943 & 0.549 & 0.875 & 29.8 \\
+\addlinespace[1pt]
+$0$ & Tsallis & 0.695 & 0.900 & 0.943 & 0.549 & 0.875 & 29.8 \\
+ & $q$-log & 0.695 & 0.900 & 0.943 & 0.549 & 0.875 & 29.8 \\
+\addlinespace[1pt]
+$0.5$ & Tsallis & 0.682 & 0.898 & 0.950 & 0.539 & 0.863 & 24.4 \\
+ & $q$-log & \win{0.693} & 0.906 & 0.943 & 0.549 & 0.863 & 29.8 \\
+\addlinespace[1pt]
+$1$ & Tsallis & 0.682 & 0.881 & 0.950 & 0.534 & 0.875 & 21.2 \\
+ & $q$-log & 0.682 & 0.881 & 0.950 & 0.534 & 0.875 & 21.2 \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE E2: S3 entropy A/B, per domain =====
+\begin{table}[t]\centering
+\caption{S3 entropy by document domain, averaged over $q\in\{-0.5,0,0.5,1\}$. $\Delta$F1 = $q$-log $-$ Tsallis; \win{green} marks the better F1 of each pair.}
+\label{tab:s3ent_domain}
+\begin{tabular}{@{}l l cccc c@{}}\toprule
+Domain & Entropy & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & AC$\uparrow$ & $\Delta$F1 \\\midrule
+Code & Tsallis & \win{0.549} & 0.881 & 0.911 & 0.850 &  \\
+ & $q$-log & 0.546 & 0.875 & 0.910 & 0.863 & -0.004 \\
+\addlinespace[1pt]
+General & Tsallis & 0.950 & 1.000 & 0.997 & 0.900 &  \\
+ & $q$-log & 0.950 & 1.000 & 0.997 & 0.900 & +0.000 \\
+\addlinespace[1pt]
+Legal & Tsallis & 0.757 & 0.950 & 0.965 & 0.863 &  \\
+ & $q$-log & \win{0.770} & 0.956 & 0.966 & 0.875 & \textcolor{green!45!black}{\textbf{+0.013}} \\
+\addlinespace[1pt]
+Medical & Tsallis & 0.647 & 0.833 & 0.937 & 0.883 &  \\
+ & $q$-log & \win{0.649} & 0.838 & 0.936 & 0.867 & \textcolor{green!45!black}{\textbf{+0.002}} \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE E3: per-document F1 at each q, both entropies =====
+\begin{table*}[t]\centering
+\caption{Per-document F1, Tsallis (T) vs.\ $q$-log (L) entropy in S3, at each Tsallis $q$. \win{green} marks the better of each T/L pair (ties, notably at $q\in\{0,1\}$ where the two effective counts coincide, are left plain).}
+\label{tab:s3ent_perdoc}
+\begin{tabular}{@{}ll cc cc cc cc@{}}\toprule
+\multirow{2}{*}{Document} & \multirow{2}{*}{Domain} & \multicolumn{2}{c}{$q=-0.5$} & \multicolumn{2}{c}{$q=0$} & \multicolumn{2}{c}{$q=0.5$} & \multicolumn{2}{c}{$q=1$} \\\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}
+ & & T & L & T & L & T & L & T & L \\\midrule
+main.py & Code & \win{0.529} & 0.516 & 0.516 & 0.516 & \win{0.526} & 0.516 & 0.531 & 0.531 \\
+s7\_rl.py & Code & 0.581 & \win{0.586} & 0.586 & 0.586 & \win{0.597} & 0.586 & 0.529 & 0.529 \\
+general.pdf & General & 0.950 & 0.950 & 0.950 & 0.950 & 0.950 & 0.950 & 0.950 & 0.950 \\
+cdpf-2025.pdf & Legal & 0.769 & \win{0.779} & 0.779 & 0.779 & 0.719 & \win{0.779} & 0.738 & 0.738 \\
+convention-entre-le-gouverne\ldots & Legal & 0.751 & \win{0.779} & 0.779 & 0.779 & 0.771 & \win{0.779} & 0.750 & 0.750 \\
+PubMedQA.pdf & Medical & 0.595 & \win{0.604} & 0.604 & 0.604 & \win{0.602} & 0.590 & 0.595 & 0.595 \\
+le\_cancer\_du\_poumon.pdf & Medical & 0.645 & \win{0.675} & 0.675 & 0.675 & 0.598 & \win{0.675} & 0.680 & 0.680 \\
+module1\_plasticité cérébral\ldots & Medical & \win{0.727} & 0.669 & 0.669 & 0.669 & \win{0.694} & 0.669 & 0.682 & 0.682 \\
+\bottomrule\end{tabular}\end{table*}

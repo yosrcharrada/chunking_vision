@@ -1,0 +1,40 @@
+% ===== TABLE Q1: qentropy at each q, before vs after the q-cosine kernel =====
+\begin{table}[t]\centering
+\caption{Effect of Tsallis $q$ on retrieval quality, before (classical cosine, S4) and after (Fitouhi--Bouzeffour $q$-cosine, S4) the kernel swap. S1--S3 (the qentropy boundary selection) are identical in both columns; only the S4 similarity kernel differs. Averaged across all 9 corpus documents. At $q=\pm1$ the $q$-cosine reduces exactly to cosine.}
+\label{tab:qcos_by_q}
+\begin{tabular}{@{}c l ccccc@{}}\toprule
+$q$ & Kernel & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & \#chk \\\midrule
+$-1$ & Before ($\cos$) & 0.684 & 0.892 & 0.961 & 0.551 & 29.2 \\
+ & After ($q\text{-}\cos$) & 0.684 & 0.892 & 0.961 & 0.551 & 29.2 \\
+\addlinespace[1pt]
+$-0.5$ & Before ($\cos$) & 0.677 & 0.896 & 0.966 & 0.541 & 21.6 \\
+ & After ($q\text{-}\cos$) & 0.682 & 0.915 & 0.964 & 0.552 & 26.8 \\
+\addlinespace[1pt]
+$0$ & Before ($\cos$) & 0.662 & 0.871 & 0.973 & 0.525 & 16.4 \\
+ & After ($q\text{-}\cos$) & 0.677 & 0.890 & 0.972 & 0.536 & 19.2 \\
+\addlinespace[1pt]
+$0.5$ & Before ($\cos$) & 0.664 & 0.860 & 0.976 & 0.521 & 14.4 \\
+ & After ($q\text{-}\cos$) & 0.674 & 0.871 & 0.975 & 0.527 & 15.8 \\
+\addlinespace[1pt]
+$1$ & Before ($\cos$) & 0.662 & 0.860 & 0.978 & 0.517 & 12.9 \\
+ & After ($q\text{-}\cos$) & 0.662 & 0.860 & 0.978 & 0.517 & 12.9 \\
+\bottomrule\end{tabular}\end{table}
+
+% ===== TABLE Q2: qentropy per domain, before vs after the q-cosine kernel =====
+\begin{table}[t]\centering
+\caption{Effect of the S4 similarity kernel by document domain, averaged over $q\in\{-1,-0.5,0,0.5,1\}$. ``Before'' = classical cosine; ``After'' = Fitouhi--Bouzeffour $q$-cosine. $\Delta$F1 = After $-$ Before.}
+\label{tab:qcos_by_domain}
+\begin{tabular}{@{}l l ccccc c@{}}\toprule
+Domain & Kernel & F1$\uparrow$ & MRR$\uparrow$ & NDCG$\uparrow$ & QCS$\uparrow$ & \#chk & $\Delta$F1 \\\midrule
+Code & Before & 0.585 & 0.843 & 0.949 & 0.409 & 32.3 &  \\
+ & After & 0.583 & 0.843 & 0.950 & 0.411 & 33.3 & \textbf{-0.002} \\
+\addlinespace[1pt]
+General & Before & 0.806 & 0.940 & 0.992 & 0.525 & 10.0 &  \\
+ & After & 0.848 & 0.980 & 0.990 & 0.531 & 11.4 & \textbf{+0.041} \\
+\addlinespace[1pt]
+Legal & Before & 0.734 & 0.981 & 0.975 & 0.579 & 17.1 &  \\
+ & After & 0.743 & 0.981 & 0.975 & 0.584 & 19.4 & \textbf{+0.008} \\
+\addlinespace[1pt]
+Medical & Before & 0.616 & 0.771 & 0.974 & 0.567 & 14.7 &  \\
+ & After & 0.613 & 0.787 & 0.973 & 0.575 & 16.9 & \textbf{-0.002} \\
+\bottomrule\end{tabular}\end{table}

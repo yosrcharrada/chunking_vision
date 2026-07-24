@@ -23,7 +23,9 @@ from pipeline.s4_boundary import filter_boundaries  # noqa: E402
 from main import _parse_file  # noqa: E402
 
 DOC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "test_documents")
-BACKEND, Q_SWEEP, QA_COUNT, MAXTOK = "openai", [-1.0, -0.5, 0.0, 0.5, 1.0], 10, 6000
+# q=-1 excluded per instructor guidance (redundant duplicate of q=+1 for the
+# q-cosine kernel's base=q^2 convention — see s4_boundary._q_cosine_similarity).
+BACKEND, Q_SWEEP, QA_COUNT, MAXTOK = "openai", [-0.5, 0.0, 0.5, 1.0], 10, 6000
 ARMS = {"cos":      {"s4_similarity": "cosine"},
         "qcos":     {"s4_similarity": "qcosine"},
         "qwin.5":   {"s4_similarity": "qcosine", "s4_qcos_window": True, "s4_qcos_lambda": 0.5},

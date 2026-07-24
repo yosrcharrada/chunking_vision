@@ -43,7 +43,12 @@ from scripts.run_benchmark import infer_domain  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOC_DIR = os.path.join(os.path.dirname(HERE), "..", "test_documents")
 BACKEND = "openai"         # fixed-dim (1536), reliable cross-set cosine; same as the main benchmark
-Q_SWEEP = [-1.0, -0.5, 0.0, 0.5, 1.0]
+# q=-1 excluded per instructor guidance: base=q^2 makes it a redundant duplicate
+# of the q=+1 classical-limit anchor for the q-cosine kernel specifically (the
+# source paper only treats q>0). Kept for the plain-cosine-only qentropy sweeps
+# elsewhere (e.g. run_benchmark.py's Table VII), just not for these kernel-swap
+# comparisons.
+Q_SWEEP = [-0.5, 0.0, 0.5, 1.0]
 QA_COUNT = 10
 MAX_DOC_TOKENS = 6000      # keep the offline sweep fast across 9 docs
 KPIS = ["f1", "mrr", "ndcg", "qcs", "retrieval_token_cost"]

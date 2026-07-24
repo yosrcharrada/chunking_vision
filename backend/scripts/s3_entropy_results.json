@@ -1,0 +1,906 @@
+[
+  {
+    "doc": "PubMedQA.pdf",
+    "domain": "Medical",
+    "n_tokens": 6262,
+    "n_queries": 10,
+    "strategy": "sentence_clustering",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.5059,
+          "recall": 0.7211,
+          "f1": 0.5946,
+          "mrr": 0.7033,
+          "ndcg": 0.8785,
+          "qcs": 0.6773,
+          "retrieval_token_cost": 726.3,
+          "answer_correct": 0.9,
+          "n_chunks": 51,
+          "d_q": 50.46
+        },
+        "qlog": {
+          "precision": 0.517,
+          "recall": 0.7265,
+          "f1": 0.6041,
+          "mrr": 0.725,
+          "ndcg": 0.8836,
+          "qcs": 0.655,
+          "retrieval_token_cost": 1673.4,
+          "answer_correct": 0.7,
+          "n_chunks": 36,
+          "d_q": 34.997
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.517,
+          "recall": 0.7265,
+          "f1": 0.6041,
+          "mrr": 0.725,
+          "ndcg": 0.8836,
+          "qcs": 0.655,
+          "retrieval_token_cost": 1673.4,
+          "answer_correct": 0.7,
+          "n_chunks": 36,
+          "d_q": 35.0
+        },
+        "qlog": {
+          "precision": 0.517,
+          "recall": 0.7265,
+          "f1": 0.6041,
+          "mrr": 0.725,
+          "ndcg": 0.8836,
+          "qcs": 0.655,
+          "retrieval_token_cost": 1673.4,
+          "answer_correct": 0.7,
+          "n_chunks": 36,
+          "d_q": 35.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.5076,
+          "recall": 0.7397,
+          "f1": 0.6021,
+          "mrr": 0.8,
+          "ndcg": 0.8894,
+          "qcs": 0.6363,
+          "retrieval_token_cost": 2442.5,
+          "answer_correct": 0.6,
+          "n_chunks": 30,
+          "d_q": 28.846
+        },
+        "qlog": {
+          "precision": 0.5065,
+          "recall": 0.7062,
+          "f1": 0.5899,
+          "mrr": 0.775,
+          "ndcg": 0.8874,
+          "qcs": 0.6536,
+          "retrieval_token_cost": 1720.5,
+          "answer_correct": 0.6,
+          "n_chunks": 36,
+          "d_q": 34.951
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.5025,
+          "recall": 0.7303,
+          "f1": 0.5953,
+          "mrr": 0.7667,
+          "ndcg": 0.8951,
+          "qcs": 0.6332,
+          "retrieval_token_cost": 2817.0,
+          "answer_correct": 0.7,
+          "n_chunks": 26,
+          "d_q": 25.245
+        },
+        "qlog": {
+          "precision": 0.5025,
+          "recall": 0.7303,
+          "f1": 0.5953,
+          "mrr": 0.7667,
+          "ndcg": 0.8951,
+          "qcs": 0.6332,
+          "retrieval_token_cost": 2817.0,
+          "answer_correct": 0.7,
+          "n_chunks": 26,
+          "d_q": 25.245
+        }
+      }
+    }
+  },
+  {
+    "doc": "cdpf-2025.pdf",
+    "domain": "Legal",
+    "n_tokens": 12000,
+    "n_queries": 10,
+    "strategy": "sentence_clustering",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.6871,
+          "recall": 0.8723,
+          "f1": 0.7687,
+          "mrr": 1.0,
+          "ndcg": 0.9817,
+          "qcs": 0.645,
+          "retrieval_token_cost": 1060.0,
+          "answer_correct": 1.0,
+          "n_chunks": 61,
+          "d_q": 59.656
+        },
+        "qlog": {
+          "precision": 0.6995,
+          "recall": 0.8797,
+          "f1": 0.7793,
+          "mrr": 1.0,
+          "ndcg": 0.9828,
+          "qcs": 0.6418,
+          "retrieval_token_cost": 1695.8,
+          "answer_correct": 0.9,
+          "n_chunks": 45,
+          "d_q": 43.997
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.6995,
+          "recall": 0.8797,
+          "f1": 0.7793,
+          "mrr": 1.0,
+          "ndcg": 0.9828,
+          "qcs": 0.6418,
+          "retrieval_token_cost": 1695.8,
+          "answer_correct": 0.9,
+          "n_chunks": 45,
+          "d_q": 44.0
+        },
+        "qlog": {
+          "precision": 0.6995,
+          "recall": 0.8797,
+          "f1": 0.7793,
+          "mrr": 1.0,
+          "ndcg": 0.9828,
+          "qcs": 0.6418,
+          "retrieval_token_cost": 1695.8,
+          "answer_correct": 0.9,
+          "n_chunks": 45,
+          "d_q": 44.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.6446,
+          "recall": 0.8123,
+          "f1": 0.7188,
+          "mrr": 0.9,
+          "ndcg": 0.9833,
+          "qcs": 0.6343,
+          "retrieval_token_cost": 2119.0,
+          "answer_correct": 0.8,
+          "n_chunks": 37,
+          "d_q": 36.112
+        },
+        "qlog": {
+          "precision": 0.6995,
+          "recall": 0.8797,
+          "f1": 0.7793,
+          "mrr": 1.0,
+          "ndcg": 0.9828,
+          "qcs": 0.6418,
+          "retrieval_token_cost": 1695.8,
+          "answer_correct": 0.9,
+          "n_chunks": 45,
+          "d_q": 43.958
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.6721,
+          "recall": 0.8192,
+          "f1": 0.7384,
+          "mrr": 0.9,
+          "ndcg": 0.9826,
+          "qcs": 0.6308,
+          "retrieval_token_cost": 1973.7,
+          "answer_correct": 0.8,
+          "n_chunks": 32,
+          "d_q": 31.33
+        },
+        "qlog": {
+          "precision": 0.6721,
+          "recall": 0.8192,
+          "f1": 0.7384,
+          "mrr": 0.9,
+          "ndcg": 0.9826,
+          "qcs": 0.6308,
+          "retrieval_token_cost": 1973.7,
+          "answer_correct": 0.8,
+          "n_chunks": 32,
+          "d_q": 31.33
+        }
+      }
+    }
+  },
+  {
+    "doc": "convention-entre-le-gouvernement-de-la-republique-tunisienne-et-malte-a-eviter-la-double-imposition-.pdf",
+    "domain": "Legal",
+    "n_tokens": 7108,
+    "n_queries": 10,
+    "strategy": "semantic_boundaries",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.7368,
+          "recall": 0.7649,
+          "f1": 0.7506,
+          "mrr": 0.95,
+          "ndcg": 0.9393,
+          "qcs": 0.6059,
+          "retrieval_token_cost": 519.7,
+          "answer_correct": 0.8,
+          "n_chunks": 67,
+          "d_q": 66.425
+        },
+        "qlog": {
+          "precision": 0.7223,
+          "recall": 0.8451,
+          "f1": 0.7789,
+          "mrr": 0.95,
+          "ndcg": 0.9472,
+          "qcs": 0.5934,
+          "retrieval_token_cost": 1022.1,
+          "answer_correct": 0.9,
+          "n_chunks": 46,
+          "d_q": 44.997
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.7223,
+          "recall": 0.8451,
+          "f1": 0.7789,
+          "mrr": 0.95,
+          "ndcg": 0.9472,
+          "qcs": 0.5934,
+          "retrieval_token_cost": 1022.1,
+          "answer_correct": 0.9,
+          "n_chunks": 46,
+          "d_q": 45.0
+        },
+        "qlog": {
+          "precision": 0.7223,
+          "recall": 0.8451,
+          "f1": 0.7789,
+          "mrr": 0.95,
+          "ndcg": 0.9472,
+          "qcs": 0.5934,
+          "retrieval_token_cost": 1022.1,
+          "answer_correct": 0.9,
+          "n_chunks": 46,
+          "d_q": 45.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.7363,
+          "recall": 0.8097,
+          "f1": 0.7713,
+          "mrr": 1.0,
+          "ndcg": 0.9499,
+          "qcs": 0.5821,
+          "retrieval_token_cost": 1618.5,
+          "answer_correct": 0.9,
+          "n_chunks": 35,
+          "d_q": 34.247
+        },
+        "qlog": {
+          "precision": 0.7223,
+          "recall": 0.8451,
+          "f1": 0.7789,
+          "mrr": 0.95,
+          "ndcg": 0.9472,
+          "qcs": 0.5934,
+          "retrieval_token_cost": 1022.1,
+          "answer_correct": 0.9,
+          "n_chunks": 46,
+          "d_q": 44.945
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.7719,
+          "recall": 0.7302,
+          "f1": 0.7505,
+          "mrr": 0.9,
+          "ndcg": 0.9537,
+          "qcs": 0.5664,
+          "retrieval_token_cost": 1803.4,
+          "answer_correct": 0.8,
+          "n_chunks": 29,
+          "d_q": 28.468
+        },
+        "qlog": {
+          "precision": 0.7719,
+          "recall": 0.7302,
+          "f1": 0.7505,
+          "mrr": 0.9,
+          "ndcg": 0.9537,
+          "qcs": 0.5664,
+          "retrieval_token_cost": 1803.4,
+          "answer_correct": 0.8,
+          "n_chunks": 29,
+          "d_q": 28.468
+        }
+      }
+    }
+  },
+  {
+    "doc": "general.pdf",
+    "domain": "General",
+    "n_tokens": 2196,
+    "n_queries": 10,
+    "strategy": "sliding_window",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 2.213
+        },
+        "qlog": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 2.0
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 2.0
+        },
+        "qlog": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 2.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 1.819
+        },
+        "qlog": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 1.863
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 1.679
+        },
+        "qlog": {
+          "precision": 0.9667,
+          "recall": 0.9333,
+          "f1": 0.9497,
+          "mrr": 1.0,
+          "ndcg": 0.997,
+          "qcs": 0.5621,
+          "retrieval_token_cost": 2196.0,
+          "answer_correct": 0.9,
+          "n_chunks": 3,
+          "d_q": 1.679
+        }
+      }
+    }
+  },
+  {
+    "doc": "le_cancer_du_poumon.pdf",
+    "domain": "Medical",
+    "n_tokens": 3167,
+    "n_queries": 10,
+    "strategy": "sentence_clustering",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.5493,
+          "recall": 0.7799,
+          "f1": 0.6446,
+          "mrr": 0.95,
+          "ndcg": 0.9498,
+          "qcs": 0.5926,
+          "retrieval_token_cost": 1037.2,
+          "answer_correct": 1.0,
+          "n_chunks": 21,
+          "d_q": 20.175
+        },
+        "qlog": {
+          "precision": 0.5967,
+          "recall": 0.7763,
+          "f1": 0.6748,
+          "mrr": 0.95,
+          "ndcg": 0.9401,
+          "qcs": 0.5803,
+          "retrieval_token_cost": 1328.3,
+          "answer_correct": 1.0,
+          "n_chunks": 17,
+          "d_q": 15.994
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.5967,
+          "recall": 0.7763,
+          "f1": 0.6748,
+          "mrr": 0.95,
+          "ndcg": 0.9401,
+          "qcs": 0.5803,
+          "retrieval_token_cost": 1328.3,
+          "answer_correct": 1.0,
+          "n_chunks": 17,
+          "d_q": 16.0
+        },
+        "qlog": {
+          "precision": 0.5967,
+          "recall": 0.7763,
+          "f1": 0.6748,
+          "mrr": 0.95,
+          "ndcg": 0.9401,
+          "qcs": 0.5803,
+          "retrieval_token_cost": 1328.3,
+          "answer_correct": 1.0,
+          "n_chunks": 17,
+          "d_q": 16.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.5397,
+          "recall": 0.67,
+          "f1": 0.5979,
+          "mrr": 0.85,
+          "ndcg": 0.9526,
+          "qcs": 0.5697,
+          "retrieval_token_cost": 1640.2,
+          "answer_correct": 1.0,
+          "n_chunks": 14,
+          "d_q": 13.055
+        },
+        "qlog": {
+          "precision": 0.5967,
+          "recall": 0.7763,
+          "f1": 0.6748,
+          "mrr": 0.95,
+          "ndcg": 0.9401,
+          "qcs": 0.5803,
+          "retrieval_token_cost": 1328.3,
+          "answer_correct": 1.0,
+          "n_chunks": 17,
+          "d_q": 15.887
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.5653,
+          "recall": 0.8524,
+          "f1": 0.6798,
+          "mrr": 0.95,
+          "ndcg": 0.9526,
+          "qcs": 0.5714,
+          "retrieval_token_cost": 1805.4,
+          "answer_correct": 1.0,
+          "n_chunks": 12,
+          "d_q": 11.1
+        },
+        "qlog": {
+          "precision": 0.5653,
+          "recall": 0.8524,
+          "f1": 0.6798,
+          "mrr": 0.95,
+          "ndcg": 0.9526,
+          "qcs": 0.5714,
+          "retrieval_token_cost": 1805.4,
+          "answer_correct": 1.0,
+          "n_chunks": 12,
+          "d_q": 11.1
+        }
+      }
+    }
+  },
+  {
+    "doc": "main.py",
+    "domain": "Code",
+    "n_tokens": 7142,
+    "n_queries": 10,
+    "strategy": "semantic_boundaries",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.5296,
+          "recall": 0.529,
+          "f1": 0.5293,
+          "mrr": 0.9,
+          "ndcg": 0.9375,
+          "qcs": 0.3508,
+          "retrieval_token_cost": 719.4,
+          "answer_correct": 0.8,
+          "n_chunks": 59,
+          "d_q": 57.819
+        },
+        "qlog": {
+          "precision": 0.5399,
+          "recall": 0.4942,
+          "f1": 0.516,
+          "mrr": 0.9,
+          "ndcg": 0.9459,
+          "qcs": 0.3405,
+          "retrieval_token_cost": 839.2,
+          "answer_correct": 0.8,
+          "n_chunks": 40,
+          "d_q": 38.998
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.5399,
+          "recall": 0.4942,
+          "f1": 0.516,
+          "mrr": 0.9,
+          "ndcg": 0.9459,
+          "qcs": 0.3405,
+          "retrieval_token_cost": 839.2,
+          "answer_correct": 0.8,
+          "n_chunks": 40,
+          "d_q": 39.0
+        },
+        "qlog": {
+          "precision": 0.5399,
+          "recall": 0.4942,
+          "f1": 0.516,
+          "mrr": 0.9,
+          "ndcg": 0.9459,
+          "qcs": 0.3405,
+          "retrieval_token_cost": 839.2,
+          "answer_correct": 0.8,
+          "n_chunks": 40,
+          "d_q": 39.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.5464,
+          "recall": 0.5069,
+          "f1": 0.5259,
+          "mrr": 0.9,
+          "ndcg": 0.9487,
+          "qcs": 0.3335,
+          "retrieval_token_cost": 997.6,
+          "answer_correct": 0.8,
+          "n_chunks": 33,
+          "d_q": 32.286
+        },
+        "qlog": {
+          "precision": 0.5399,
+          "recall": 0.4942,
+          "f1": 0.516,
+          "mrr": 0.9,
+          "ndcg": 0.9459,
+          "qcs": 0.3405,
+          "retrieval_token_cost": 839.2,
+          "answer_correct": 0.8,
+          "n_chunks": 40,
+          "d_q": 38.962
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.564,
+          "recall": 0.5019,
+          "f1": 0.5311,
+          "mrr": 0.9,
+          "ndcg": 0.9506,
+          "qcs": 0.3343,
+          "retrieval_token_cost": 1070.7,
+          "answer_correct": 0.8,
+          "n_chunks": 30,
+          "d_q": 28.72
+        },
+        "qlog": {
+          "precision": 0.564,
+          "recall": 0.5019,
+          "f1": 0.5311,
+          "mrr": 0.9,
+          "ndcg": 0.9506,
+          "qcs": 0.3343,
+          "retrieval_token_cost": 1070.7,
+          "answer_correct": 0.8,
+          "n_chunks": 30,
+          "d_q": 28.72
+        }
+      }
+    }
+  },
+  {
+    "doc": "module1_plasticit\u00e9 c\u00e9r\u00e9brale 2023.pdf",
+    "domain": "Medical",
+    "n_tokens": 1790,
+    "n_queries": 10,
+    "strategy": "sentence_clustering",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.6387,
+          "recall": 0.8442,
+          "f1": 0.7272,
+          "mrr": 0.8625,
+          "ndcg": 0.958,
+          "qcs": 0.6092,
+          "retrieval_token_cost": 483.2,
+          "answer_correct": 0.9,
+          "n_chunks": 19,
+          "d_q": 18.805
+        },
+        "qlog": {
+          "precision": 0.6058,
+          "recall": 0.7458,
+          "f1": 0.6686,
+          "mrr": 0.825,
+          "ndcg": 0.9764,
+          "qcs": 0.5847,
+          "retrieval_token_cost": 1014.1,
+          "answer_correct": 0.9,
+          "n_chunks": 10,
+          "d_q": 8.994
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.6058,
+          "recall": 0.7458,
+          "f1": 0.6686,
+          "mrr": 0.825,
+          "ndcg": 0.9764,
+          "qcs": 0.5847,
+          "retrieval_token_cost": 1014.1,
+          "answer_correct": 0.9,
+          "n_chunks": 10,
+          "d_q": 9.0
+        },
+        "qlog": {
+          "precision": 0.6058,
+          "recall": 0.7458,
+          "f1": 0.6686,
+          "mrr": 0.825,
+          "ndcg": 0.9764,
+          "qcs": 0.5847,
+          "retrieval_token_cost": 1014.1,
+          "answer_correct": 0.9,
+          "n_chunks": 10,
+          "d_q": 9.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.6379,
+          "recall": 0.7607,
+          "f1": 0.6939,
+          "mrr": 0.8333,
+          "ndcg": 0.9816,
+          "qcs": 0.5728,
+          "retrieval_token_cost": 1214.6,
+          "answer_correct": 0.9,
+          "n_chunks": 8,
+          "d_q": 6.97
+        },
+        "qlog": {
+          "precision": 0.6058,
+          "recall": 0.7458,
+          "f1": 0.6686,
+          "mrr": 0.825,
+          "ndcg": 0.9764,
+          "qcs": 0.5847,
+          "retrieval_token_cost": 1014.1,
+          "answer_correct": 0.9,
+          "n_chunks": 10,
+          "d_q": 8.872
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.6167,
+          "recall": 0.7633,
+          "f1": 0.6822,
+          "mrr": 0.7833,
+          "ndcg": 0.9828,
+          "qcs": 0.5661,
+          "retrieval_token_cost": 1358.4,
+          "answer_correct": 1.0,
+          "n_chunks": 7,
+          "d_q": 6.37
+        },
+        "qlog": {
+          "precision": 0.6167,
+          "recall": 0.7633,
+          "f1": 0.6822,
+          "mrr": 0.7833,
+          "ndcg": 0.9828,
+          "qcs": 0.5661,
+          "retrieval_token_cost": 1358.4,
+          "answer_correct": 1.0,
+          "n_chunks": 7,
+          "d_q": 6.37
+        }
+      }
+    }
+  },
+  {
+    "doc": "s7_rl.py",
+    "domain": "Code",
+    "n_tokens": 7824,
+    "n_queries": 10,
+    "strategy": "sentence_clustering",
+    "by_q": {
+      "-0.5": {
+        "tsallis": {
+          "precision": 0.5875,
+          "recall": 0.5737,
+          "f1": 0.5805,
+          "mrr": 0.85,
+          "ndcg": 0.8585,
+          "qcs": 0.4424,
+          "retrieval_token_cost": 815.4,
+          "answer_correct": 0.7,
+          "n_chunks": 53,
+          "d_q": 52.065
+        },
+        "qlog": {
+          "precision": 0.5871,
+          "recall": 0.5853,
+          "f1": 0.5862,
+          "mrr": 0.85,
+          "ndcg": 0.8711,
+          "qcs": 0.434,
+          "retrieval_token_cost": 1193.1,
+          "answer_correct": 0.9,
+          "n_chunks": 41,
+          "d_q": 39.998
+        }
+      },
+      "0": {
+        "tsallis": {
+          "precision": 0.5871,
+          "recall": 0.5853,
+          "f1": 0.5862,
+          "mrr": 0.85,
+          "ndcg": 0.8711,
+          "qcs": 0.434,
+          "retrieval_token_cost": 1193.1,
+          "answer_correct": 0.9,
+          "n_chunks": 41,
+          "d_q": 40.0
+        },
+        "qlog": {
+          "precision": 0.5871,
+          "recall": 0.5853,
+          "f1": 0.5862,
+          "mrr": 0.85,
+          "ndcg": 0.8711,
+          "qcs": 0.434,
+          "retrieval_token_cost": 1193.1,
+          "answer_correct": 0.9,
+          "n_chunks": 41,
+          "d_q": 40.0
+        }
+      },
+      "0.5": {
+        "tsallis": {
+          "precision": 0.5729,
+          "recall": 0.6237,
+          "f1": 0.5972,
+          "mrr": 0.9,
+          "ndcg": 0.8937,
+          "qcs": 0.4238,
+          "retrieval_token_cost": 1546.9,
+          "answer_correct": 1.0,
+          "n_chunks": 35,
+          "d_q": 33.83
+        },
+        "qlog": {
+          "precision": 0.5871,
+          "recall": 0.5853,
+          "f1": 0.5862,
+          "mrr": 0.85,
+          "ndcg": 0.8711,
+          "qcs": 0.434,
+          "retrieval_token_cost": 1193.1,
+          "answer_correct": 0.9,
+          "n_chunks": 41,
+          "d_q": 39.964
+        }
+      },
+      "1": {
+        "tsallis": {
+          "precision": 0.4689,
+          "recall": 0.6078,
+          "f1": 0.5294,
+          "mrr": 0.85,
+          "ndcg": 0.882,
+          "qcs": 0.4093,
+          "retrieval_token_cost": 1470.7,
+          "answer_correct": 1.0,
+          "n_chunks": 31,
+          "d_q": 30.121
+        },
+        "qlog": {
+          "precision": 0.4689,
+          "recall": 0.6078,
+          "f1": 0.5294,
+          "mrr": 0.85,
+          "ndcg": 0.882,
+          "qcs": 0.4093,
+          "retrieval_token_cost": 1470.7,
+          "answer_correct": 1.0,
+          "n_chunks": 31,
+          "d_q": 30.121
+        }
+      }
+    }
+  }
+]

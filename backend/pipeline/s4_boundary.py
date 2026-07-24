@@ -134,15 +134,55 @@ def filter_boundaries(
 
     # S4 semantic-similarity mode: "cosine" (classical, the old way) or
     # "qcosine" (the Fitouhi–Bouzeffour q-cosine of the inter-chunk angle, base = q²).
-    # When s4_similarity is explicitly supplied the merge is gated directly on
-    # the (q-)cosine similarity vs τ_sem — the kernel actually drives the merge.
-    # When it is absent we keep the legacy composite-score gate untouched, so
-    # earlier experiments / tables that never set the flag are reproduced exactly.
-    kernel_gate = "s4_similarity" in config
+    # sim_mode ALWAYS controls which formula computes the `semantic` value below
+    # (used both as one ingredient of the composite score AND, in kernel-gate
+    # mode, as the merge decision itself).
+    #
+    # s4_gate_mode controls the DECISION RULE, independent of sim_mode:
+    #   "kernel"    (default when s4_similarity is present) — merge iff the
+    #               (q-)cosine similarity alone exceeds τ_sem.  The kernel
+    #               directly drives the merge; the other 5 signals are still
+    #               computed and reported for diagnostics but do not vote.
+    #   "composite" — merge iff the ORIGINAL 6-signal weighted blend exceeds
+    #               τ_sem, exactly as the pipeline always worked, with the ONE
+    #               ingredient swapped: cosine or q-cosine per sim_mode.  This
+    #               isolates "does swapping the semantic ingredient inside the
+    #               real, deployed S4 formula help" — a more faithful ablation
+    #               than the kernel-direct comparison, since nothing about the
+    #               decision RULE changes, only that one ingredient.
+    # When s4_similarity is absent entirely: legacy behaviour, byte-for-byte
+    # unchanged (composite gate, semantic=cosine) — every earlier experiment /
+    # table that never set the flag is reproduced exactly.
+    _explicit_gate_mode = config.get("s4_gate_mode")
+    if _explicit_gate_mode is not None:
+        kernel_gate = str(_explicit_gate_mode).lower() == "kernel"
+    else:
+        kernel_gate = "s4_similarity" in config
     sim_mode = str(config.get("s4_similarity", "cosine")).lower()
     if sim_mode not in {"cosine", "qcosine"}:
         sim_mode = "cosine"
-    q_param = float(config.get("q_entropy_param", 1.0))
+    # q_s4_kernel is the DECOUPLED gene the S7 GA tunes specifically for this
+    # kernel (independent of S3's q_entropy_param, which drives D_q).  Any
+    # caller that predates this gene (all the earlier S4-only ablations,
+    # bench_s4_similarity.py, run_benchmark.py's kernel-swap block, the
+    # already-published qcosine_sim_tables.tex, etc.) never sets it, so they
+    # fall back to q_entropy_param exactly as before -- byte-for-byte
+    # unchanged behaviour.
+    q_param = float(config.get("q_s4_kernel", config.get("q_entropy_param", 1.0)))
+
+    # The Fitouhi--Bouzeffour series (eqs. 5-6) is only rigorously defined for
+    # base=q^2 in (0,1); base=1 is a removable singularity, justified in the
+    # source paper ONLY as the q->1^- classical limit (cos(x;q^2) -> cos(x)).
+    # Because our convention squares q, q=-1 maps to that SAME base=1 point --
+    # a redundant duplicate of the q=+1 anchor that the paper never considers
+    # (it only treats q>0).  Per instructor guidance, q=-1 is excluded for the
+    # q-cosine kernel: floor q away from exactly -1 so the formula never
+    # evaluates that point, while q=+1 remains the valid classical-limit
+    # anchor.  This floor affects ONLY the qcosine kernel below -- S3's D_q
+    # (Tsallis entropy) is untouched and still spans the full q in [-1, 1].
+    _QCOS_MIN_Q = -0.999
+    if sim_mode == "qcosine" and q_param <= _QCOS_MIN_Q:
+        q_param = _QCOS_MIN_Q
 
     # Entropy-gated q-cosine (experimental, OFF by default): couple the kernel's
     # deformation to S3's per-boundary strength (chunk["boundary_signal"]).  A
@@ -775,8 +815,16 @@ def _q_cosine_similarity(cos_val: float, q: float, terms: int = 24) -> float:
     cosine is required to reach the same q-similarity (cos(θ;0)=1-θ²) — so
     q-cosine merging keeps finer boundaries.  It is monotonically decreasing in
     the angle for every q, so the "high = similar = merge" ordering is preserved.
+
+    q=-1 is floored to -0.999: base=q^2 would otherwise coincide exactly with
+    q=+1's classical-limit anchor, a redundant point the source paper never
+    considers (it only treats q>0) -- excluded per instructor guidance. This
+    floor is defence-in-depth for callers that reach this function directly
+    (e.g. S3's optional q-cosine gap re-ranking); filter_boundaries applies the
+    same floor to config["q_entropy_param"] before it ever gets here.
     """
-    return _q_cos_sim_base(cos_val, float(q) * float(q), terms)
+    qf = max(float(q), -0.999)
+    return _q_cos_sim_base(cos_val, qf * qf, terms)
 
 
 def _q_cos_sim_base(cos_val: float, base: float, terms: int = 24) -> float:

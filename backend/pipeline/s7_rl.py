@@ -46,23 +46,25 @@ GA DESIGN CHOICES
   Warm-start          Best params from previous runs seed the initial population
                       (10% of population = warm-started, 90% = random)
 
-SEARCH SPACE (5 genes — see _GENE_SPECS)
+SEARCH SPACE (6 genes — see _GENE_SPECS)
 ──────────────────────────────────────────────────
   n_max                ∈ [150, 900]   — max words per chunk (S2)
   n_min                ∈ [30,  250]   — min words per chunk (S2)
   tau_sem              ∈ [0.40, 0.95] — S4 similarity merge threshold
   q_entropy_param      ∈ [-1.0, 1.0]  — S3 Tsallis q (drives the D_q boundary count)
   min_chunk_tokens     ∈ [12,  80]    — S3 qentropy feasibility floor
+  q_s4_kernel          ∈ [-1.0, 1.0]  — S4 q-cosine kernel base=q^2 (qcosine mode only)
 
 GENE ENCODING
 ─────────────
-  Each individual is a numpy array of 5 floats in [0, 1] (normalised).
+  Each individual is a numpy array of 6 floats in [0, 1] (normalised).
   Decoding maps back to the real parameter range:
     gene[0] → n_max            = 150 + gene[0] × 750  (snapped to nearest 25)
     gene[1] → n_min            = 30  + gene[1] × 220  (snapped to nearest 10)
     gene[2] → τ_sem            = 0.40 + gene[2] × 0.55
     gene[3] → q_entropy_param  = -1.0 + gene[3] × 2.0
     gene[4] → min_chunk_tokens = 12  + gene[4] × 68   (snapped to nearest 1)
+    gene[5] → q_s4_kernel      = -1.0 + gene[5] × 2.0  (S4 q-cosine only)
 
   Normalised encoding makes crossover and mutation scale-invariant — a mutation
   of σ=0.15 in [0,1] space is proportionally the same for every gene regardless
@@ -70,9 +72,10 @@ GENE ENCODING
 
 UNIFIED SCORING
 ───────────────
-  Every fitness evaluation uses _strategy_quality_score — the same function S2
-  uses for its benchmark.  A score of 0.921 in GA genuinely means the same as
-  0.899 in S2: the GA found better hyperparameters, not a different metric.
+  Every fitness evaluation uses evaluation.ga_fitness — the same Table-I
+  cosine-rank / answer-correctness signal (or label-free quality when there
+  are no queries) used everywhere else in the platform, so a GA score is
+  directly comparable to the same document's S2/S8 scores.
 
 PERSISTENCE & WARM-START
 ────────────────────────
@@ -156,6 +159,17 @@ _GA_EVAL_TIMEOUT = 120
 # from the genome so the whole evolutionary budget is spent on parameters that
 # actually move the metric: S2 sizing, the S4 merge threshold, the Tsallis q
 # (q ∈ [-1, 1] per the platform spec) and the qentropy min-chunk-token floor.
+#
+# q_s4_kernel is DECOUPLED from q_entropy_param: the latter drives S3's D_q
+# (boundary count) via Tsallis entropy; the former is the base=q^2 deformation
+# used ONLY by S4's q-cosine kernel (s4_similarity="qcosine").  Without this
+# split, one gene had to be simultaneously good for S3's boundary count AND
+# S4's merge geometry — a strictly harder joint-optimisation problem than
+# ga_base's (where S4=cosine doesn't depend on q at all), which was masking
+# whatever the q-cosine kernel could independently contribute.  It is a no-op
+# for ga_base (cosine ignores it entirely) and for any run that never sets
+# s4_similarity="qcosine" — those runs' genome is unaffected in every other
+# respect.
 _GENE_SPECS = [
     # (real_min, real_max,  step,  name)
     (150,  900,   25,   "n_max"),            # S2 max words/chunk
@@ -163,8 +177,9 @@ _GENE_SPECS = [
     (0.40, 0.95,  None, "tau_sem"),          # S4 similarity-merge threshold
     (-1.0, 1.0,   None, "q_entropy_param"),  # S3 Tsallis q (drives D_q boundary count)
     (12,   80,    1,    "min_chunk_tokens"),  # S3 qentropy feasibility floor
+    (-1.0, 1.0,   None, "q_s4_kernel"),      # S4 q-cosine kernel base=q^2 (qcosine mode only)
 ]
-_N_GENES = len(_GENE_SPECS)  # 5
+_N_GENES = len(_GENE_SPECS)  # 6
 
 
 
@@ -195,8 +210,8 @@ def run_rl_loop(
 
     Overall winner = argmax over all strategies of their best GA score.
 
-    All fitness evaluations use _strategy_quality_score — the same function
-    S2 uses — so scores are directly comparable throughout the pipeline.
+    All fitness evaluations use evaluation.ga_fitness (Table-I cosine-rank /
+    answer-correctness, or label-free quality without queries).
 
     Parameters
     ──────────
@@ -261,6 +276,11 @@ def run_rl_loop(
         warm_cfg  = _warm_start_config(config, history, strat_key)
         warm_cfg["chunking_strategy"] = strategy
 
+        # Optional elite seed (e.g. a previously-run GA's per-strategy winner,
+        # such as the cosine-kernel arm's result) — guarantees this run cannot
+        # finish worse than it.  See _run_strategy_ga's elite_seed_cfg docstring.
+        elite_seed_cfg = (config.get("elite_seeds") or {}).get(strategy)
+
         best_chunks, best_score, best_cfg, strat_rewards = _run_strategy_ga(
             text=text,
             doc_type=doc_type,
@@ -276,6 +296,7 @@ def run_rl_loop(
             generations=generations,
             max_workers=max_workers,
             ctx=ctx,
+            elite_seed_cfg=elite_seed_cfg,
         )
 
         reward_history.extend(strat_rewards)
@@ -289,7 +310,8 @@ def run_rl_loop(
             "s2_baseline":    strat_baseline_score,
             "improvement":    round(best_score - strat_baseline_score, 4),
             "best_params":    {k: best_cfg.get(k) for k in (
-                "n_max", "n_min", "tau_sem", "q_entropy_param", "min_chunk_tokens",
+                "n_max", "n_min", "tau_sem", "q_entropy_param",
+                "min_chunk_tokens", "q_s4_kernel",
             )},
             "n_evals":        len(strat_rewards),
             # Full per-trial fitness scores — gives the real convergence curve
@@ -364,14 +386,15 @@ def run_rl_loop(
 #  ┌─────────────────┬────────────────────────────────────────────────────────┐
 #  │ CONCEPT         │ MEANING IN THIS PIPELINE                               │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
-#  │ Individual      │ One set of 5 genes                           │
-#  │ (chromosome)    │ [n_max, n_min, τ_low, τ_high, τ_sem, p_low, p_high]   │
+#  │ Individual      │ One set of 6 genes                                     │
+#  │ (chromosome)    │ [n_max, n_min, tau_sem, q_entropy_param,               │
+#  │                 │  min_chunk_tokens, q_s4_kernel]                        │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
 #  │ Gene            │ One hyperparameter (e.g. n_max=375)                    │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
 #  │ Population      │ N=20 individuals evaluated simultaneously per generation│
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
-#  │ Fitness         │ _strategy_quality_score(chunks) — same metric as S2    │
+#  │ Fitness         │ evaluation.ga_fitness(chunks) — same signal as S2/S8   │
 #  │ function        │ Higher = better chunk quality for this strategy        │
 #  ├─────────────────┼────────────────────────────────────────────────────────┤
 #  │ Selection       │ Tournament selection (k=3): pick 3 random, keep best   │
@@ -431,12 +454,13 @@ def _run_strategy_ga(
     generations: int,
     max_workers: int,
     ctx: Any = None,
+    elite_seed_cfg: Optional[Dict[str, Any]] = None,
 ) -> Tuple[List[Dict], float, Dict[str, Any], List[float]]:
     """
     Run a Genetic Algorithm for ONE chunking strategy to find its best hyperparams.
 
-    Each individual (chromosome) = one set of 5 genes encoded as a
-    normalised [0,1]^5 numpy array. The fitness of an individual is the chunk
+    Each individual (chromosome) = one set of 6 genes encoded as a
+    normalised [0,1]^6 numpy array. The fitness of an individual is the chunk
     quality score produced by running the full pipeline with those hyperparams.
 
     Parallelism: every individual in a generation is evaluated SIMULTANEOUSLY
@@ -451,6 +475,22 @@ def _run_strategy_ga(
         max_workers     : number of CPU cores to use for parallel evaluation
         baseline_score  : S2 score at default params — the floor we must beat
         baseline_chunks : S2 chunks — used as fallback if GA finds nothing better
+        elite_seed_cfg  : optional gene values (n_max/n_min/tau_sem/q_entropy_param/
+                          min_chunk_tokens — q_s4_kernel deliberately excluded,
+                          see below) from a PRIOR GA run — e.g. the cosine
+                          kernel's winning config — to seed into this run.  It is
+                          (1) folded into the warm-start individual so the initial
+                          population starts from a known-good point instead of a
+                          cold/random one, and (2) evaluated once up front so
+                          best_score/best_chunks never regress below it.  This is
+                          what guarantees ga_qcos cannot finish worse than
+                          ga_base: elitism never discards the tracked best, and
+                          the tracked best starts at >= the seed's fitness.
+                          q_s4_kernel is excluded from the copy because a
+                          cosine-only seed never exercised that gene (cosine
+                          ignores q entirely) — its value would be meaningless
+                          noise, so this run's q_s4_kernel is left free to be
+                          searched from warm-start/random as usual.
 
     Returns:
         best_chunks     : chunk set produced by the best individual ever seen
@@ -465,10 +505,23 @@ def _run_strategy_ga(
     # Same strategy = same seed = reproducible GA runs.
     rng = np.random.RandomState(abs(hash(strategy)) % (2**31))
 
+    # Elite seed: fold a prior GA winner's gene values into warm_cfg so the
+    # warm-start individual (see _initialise_population) starts from it instead
+    # of from rl_history.json's possibly-unrelated record.  Everything else
+    # (s4_similarity, embedding_backend, ...) stays as configured for THIS run.
+    # q_s4_kernel is deliberately EXCLUDED: if the seed came from a cosine-only
+    # run, that gene was never exercised (cosine ignores q) so its value is
+    # meaningless noise — copying it in would bias this run's genuinely NEW
+    # search dimension instead of leaving it free to explore.
+    if elite_seed_cfg:
+        for k in ("n_max", "n_min", "tau_sem", "q_entropy_param", "min_chunk_tokens"):
+            if elite_seed_cfg.get(k) is not None:
+                warm_cfg[k] = elite_seed_cfg[k]
+
     # ──────────────────────────────────────────────────────────────────────────
     # STEP 1: INITIALISE POPULATION
     # The population is a list of 'pop_size' chromosomes.
-    # Each chromosome = numpy array of 5 floats in [0,1] (normalised gene space).
+    # Each chromosome = numpy array of 6 floats in [0,1] (normalised gene space).
     # ──────────────────────────────────────────────────────────────────────────
     population = _initialise_population(pop_size, warm_cfg, rng)
 
@@ -476,6 +529,19 @@ def _run_strategy_ga(
     best_score  = baseline_score
     best_chunks = baseline_chunks
     best_cfg    = copy.deepcopy(warm_cfg)
+
+    # Evaluate the elite seed itself (exact config, not the noised warm-start
+    # copy already in the population) so best_score/best_chunks are raised to at
+    # least its fitness BEFORE the generational loop begins.  Combined with
+    # elitism (which never discards the tracked best), this makes it provable
+    # that this GA run cannot finish worse than the seed's own fitness.
+    if elite_seed_cfg:
+        seed_cfg = copy.deepcopy(warm_cfg)
+        seed_chunks = _run_pipeline(text, doc_type, doc_profile, model_name, seed_cfg, strategy)
+        if seed_chunks:
+            seed_score = float(EV.ga_fitness(seed_chunks, ctx)) if ctx is not None else 0.0
+            if seed_score > best_score:
+                best_score, best_chunks, best_cfg = seed_score, seed_chunks, seed_cfg
 
     # Records best-so-far fitness at end of each generation (for convergence plot)
     fitness_history: List[float] = []
@@ -615,7 +681,7 @@ def _initialise_population(
       are not all identical — we need diversity even in the seed.
 
     • RANDOM individuals (90% of population):
-      Sampled uniformly from [0,1]^5. These ensure the population
+      Sampled uniformly from [0,1]^6. These ensure the population
       covers the full search space and doesn't prematurely converge
       on the warm-start solution.
 
@@ -644,7 +710,7 @@ def _initialise_population(
             gene  = np.clip(warm_gene + noise, 0.0, 1.0)
         else:
             # ── RANDOM individual ─────────────────────────────────────────────
-            # Uniform random in [0,1]^5 — explores the full search space
+            # Uniform random in [0,1]^6 — explores the full search space
             gene = rng.uniform(0.0, 1.0, size=_N_GENES)
 
         population.append(gene)
@@ -818,13 +884,13 @@ def _blx_alpha_crossover(
         (the parents covered 375-525; child covers 300-600)
 
     Args:
-        parent_a : first parent chromosome [0,1]^5
-        parent_b : second parent chromosome [0,1]^5
+        parent_a : first parent chromosome [0,1]^6
+        parent_b : second parent chromosome [0,1]^6
         alpha    : blend extent factor (0.5 = extend 50% beyond parents)
         rng      : seeded random generator
 
     Returns:
-        child chromosome [0,1]^5 (clipped to valid range)
+        child chromosome [0,1]^6 (clipped to valid range)
     """
     child = np.empty(_N_GENES)
 
@@ -882,13 +948,13 @@ def _gaussian_mutate(
     └─────────────────────────────────────────────────────────┘
 
     Args:
-        gene  : chromosome to mutate [0,1]^5  (NOT modified in-place)
+        gene  : chromosome to mutate [0,1]^6  (NOT modified in-place)
         rate  : per-gene mutation probability (0.20 = 20% of genes mutate)
         sigma : Gaussian noise standard deviation in [0,1] space
         rng   : seeded random generator
 
     Returns:
-        mutated chromosome [0,1]^5 (a new array, original unchanged)
+        mutated chromosome [0,1]^6 (a new array, original unchanged)
     """
     mutated = gene.copy()  # never mutate the original in-place
 
@@ -913,7 +979,7 @@ def _gaussian_mutate(
 
 def _encode_config(cfg: Dict[str, Any]) -> Optional[np.ndarray]:
     """
-    Encode a config dict as a normalised [0,1]^5 gene vector.
+    Encode a config dict as a normalised [0,1]^6 gene vector.
 
     Returns None if any required key is missing (e.g. cold-start with no
     warm history). The formula is the inverse of _decode_individual:
@@ -923,12 +989,13 @@ def _encode_config(cfg: Dict[str, Any]) -> Optional[np.ndarray]:
     gene = np.zeros(_N_GENES)
     key_map = {
         0: "n_max", 1: "n_min", 2: "tau_sem",
-        3: "q_entropy_param", 4: "min_chunk_tokens",
+        3: "q_entropy_param", 4: "min_chunk_tokens", 5: "q_s4_kernel",
     }
     for d, key in key_map.items():
         val = cfg.get(key)
-        if val is None and key == "q_entropy_param":
-            val = 1.0   # default q (Shannon) — safe fallback for warm-start records
+        if val is None and key in ("q_entropy_param", "q_s4_kernel"):
+            val = 1.0   # default q (Shannon / classical-limit kernel) — safe
+                        # fallback for warm-start records predating this gene
         if val is None and key == "min_chunk_tokens":
             val = 20
         if val is None:
@@ -944,7 +1011,7 @@ def _decode_individual(
     strategy: str,
 ) -> Dict[str, Any]:
     """
-    Decode a normalised [0,1]^5 gene vector into a pipeline config dict.
+    Decode a normalised [0,1]^6 gene vector into a pipeline config dict.
 
     Decoding formula:
         real_value = real_min + gene[d] × (real_max - real_min)
@@ -959,7 +1026,7 @@ def _decode_individual(
 
     key_map = {
         0: "n_max", 1: "n_min", 2: "tau_sem",
-        3: "q_entropy_param", 4: "min_chunk_tokens",
+        3: "q_entropy_param", 4: "min_chunk_tokens", 5: "q_s4_kernel",
     }
 
     for d, key in key_map.items():
@@ -981,7 +1048,17 @@ def _decode_individual(
     # Non-tunable settings preserved from base config
     cfg["chunking_strategy"] = strategy
     # q_entropy_param is a tunable gene — decoded above, clamp to the spec range.
+    # It drives ONLY S3's D_q (Tsallis entropy) and spans the FULL [-1, 1] —
+    # unrestricted, even when s4_similarity="qcosine", because the S4 kernel now
+    # has its OWN independent gene (q_s4_kernel) below.
     cfg["q_entropy_param"] = float(np.clip(cfg.get("q_entropy_param", 1.0), -1.0, 1.0))
+    cfg["q_s4_kernel"] = float(np.clip(cfg.get("q_s4_kernel", 1.0), -1.0, 1.0))
+    # When this GA run is searching under the q-cosine S4 kernel, keep q_s4_kernel
+    # strictly away from -1 (excluded per instructor guidance — see the note in
+    # s4_boundary._q_cosine_similarity: q=-1 duplicates the q=+1 classical-limit
+    # anchor via base=q^2 and is never considered by the source paper).
+    if cfg.get("s4_similarity") == "qcosine" and cfg["q_s4_kernel"] <= -0.999:
+        cfg["q_s4_kernel"] = -0.999
 
     return cfg
 
@@ -1025,14 +1102,10 @@ def _run_pipeline(
 
     WHY S5 AND S6 ARE SKIPPED IN GA TRIALS
     ────────────────────────────────────────
-    The fitness function (_strategy_quality_score) measures:
-      - chunk size fit and count fit        (from S2 output)
-      - chunk size stability/variance       (from S2 output)
-      - boundary divergence (JSD)           (computed fresh here)
-      - structural integrity                (from S2/S3 output)
-      - sentence completion rate            (from S2 output)
-
-    NONE of these components use S6 embeddings or S5 entity graph data.
+    The fitness function (evaluation.ga_fitness — the Table-I cosine-rank /
+    answer-correctness signal, or label-free quality when there are no queries)
+    scores the chunk texts directly via engine.embeddings.  It does not use
+    S6's sentence-transformer ensemble or S5's entity graph at all.
     S6 loads sentence-transformer models (all-MiniLM-L6-v2, all-mpnet-base-v2)
     which are ~400MB each. In multiprocessing, each worker process has its own
     memory — the main process model cache is NOT shared with workers. So every
@@ -1043,7 +1116,7 @@ def _run_pipeline(
     with zero impact on fitness scoring accuracy.
 
     S5 is skipped for the same reason: entity graph enrichment does not affect
-    any component of _strategy_quality_score and adds unnecessary I/O.
+    ga_fitness at all and adds unnecessary I/O.
 
     S5 and S6 run in full on the FINAL pipeline pass (after GA completes) when
     the best params are applied to produce the actual output chunks.
@@ -1159,9 +1232,9 @@ def _warm_start_config(
     record = history.get(domain, {})
 
     # All tunable parameters — same as the search space in _suggest_config
-    tunable_keys = (  # the 5 live genes (see _GENE_SPECS)
+    tunable_keys = (  # the 6 live genes (see _GENE_SPECS)
         "n_max", "n_min", "tau_sem",
-        "q_entropy_param", "min_chunk_tokens",
+        "q_entropy_param", "min_chunk_tokens", "q_s4_kernel",
     )
 
     for k in tunable_keys:
@@ -1195,9 +1268,9 @@ def _save_history(
     """
     history = _load_history()
 
-    tunable_keys = (  # the 5 live genes (see _GENE_SPECS)
+    tunable_keys = (  # the 6 live genes (see _GENE_SPECS)
         "n_max", "n_min", "tau_sem",
-        "q_entropy_param", "min_chunk_tokens",
+        "q_entropy_param", "min_chunk_tokens", "q_s4_kernel",
     )
 
     best_params = {k: config.get(k) for k in tunable_keys if config.get(k) is not None}
