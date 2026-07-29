@@ -1,8 +1,0 @@
-T1
-.venv\scripts\activate
-cd backend
-uvicorn main:app --reload
-
-T2
-cd frontend
-npm run dev
