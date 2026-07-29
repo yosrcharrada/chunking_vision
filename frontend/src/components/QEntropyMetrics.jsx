@@ -31,6 +31,10 @@ export default function QEntropyMetrics({ p2 }) {
   const overall = p2.summary?.overall
   const bestPer = p2.summary?.best_per_metric || {}
   const qstats = p2.qentropy || {}
+  // When any strategy ran the q-log entropy family, the S_q column shows the
+  // q-logarithm entropy value (nats) instead of the Tsallis bits, and the
+  // header is relabelled so it is unambiguous which entropy is on screen.
+  const anyQlog = strategies.some(n => (qstats[n] || {}).entropy_mode === 'qlog')
 
   return (
     <div className="card" style={{ marginBottom: 14 }}>
@@ -58,7 +62,11 @@ export default function QEntropyMetrics({ p2 }) {
               <th>q</th>
               <th>D_q</th>
               <th>H (bits)</th>
-              <th>S_q (bits)</th>
+              <th title={anyQlog
+                ? 'q-logarithm entropy S_q^K (nats) — the q-deformed-log entropy driving the boundary count'
+                : 'Tsallis q-entropy S_q (bits)'}>
+                {anyQlog ? 'S_q^K (q-log)' : 'S_q (bits)'}
+              </th>
               <th>h_K</th>
               {info.map(m => <th key={m.key} title={m.desc}>{m.label}</th>)}
             </tr>
@@ -76,7 +84,7 @@ export default function QEntropyMetrics({ p2 }) {
                   <td>{fmt(q.q, 2)}</td>
                   <td>{fmt(q.diversity_number, 2)}</td>
                   <td>{fmt(q.shannon_bits, 2)}</td>
-                  <td>{fmt(q.tsallis_bits, 2)}</td>
+                  <td>{fmt(q.entropy_mode === 'qlog' ? q.qlog_bits : q.tsallis_bits, 2)}</td>
                   <td>{fmt(q.entropy_rate, 3)}</td>
                   {info.map(col => {
                     const v = m[col.key]

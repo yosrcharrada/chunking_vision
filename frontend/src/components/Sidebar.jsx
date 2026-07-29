@@ -81,11 +81,12 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
         <div className="cfg-section">
           <div className="cfg-section-title">qEntropy (S3)</div>
 
-          {/* Tsallis q ∈ [-1, 1]. q<1 → finer (keeps weak shifts), q>1 → coarser,
-              q=1 → Shannon perplexity exp(H). D_q = round(diversity number) sets
-              the boundary count. Auto-tuned by the S7 GA. */}
+          {/* Entropy q ∈ [-1, 1] — shared by BOTH S3 entropy families (q-log and
+              Tsallis). q<1 → finer (keeps weak shifts), q>1 → coarser,
+              q=1 → Shannon. D_q = round(diversity number) sets the boundary
+              count. Auto-tuned by the S7 GA (gene q_entropy_param). */}
           <SliderRow
-            label="Tsallis q"
+            label="q-entropy q"
             min={-1.0} max={1.0} step={0.05} decimals={2}
             value={config.q_entropy_param ?? 1.0}
             onChange={v => set('q_entropy_param', v)}
@@ -97,6 +98,21 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
                      onChange={v => set('max_chunk_tokens', v)} />
           <SliderRow label="Shift window" min={0} max={5} value={config.window ?? 1} onChange={v => set('window', v)} />
 
+          {/* S3 entropy family driving the D_q boundary count: the q-logarithm
+              entropy S_q^K (q-deformed log, Lambert form) vs the classical
+              Tsallis Hill number.  Both reduce to Shannon at q=1; q is the same
+              q_entropy_param gene. */}
+          <div className="cfg-row">
+            <div className="cfg-label"><span>S3 entropy</span></div>
+            <select
+              value={config.entropy_mode ?? 'qlog'}
+              onChange={e => set('entropy_mode', e.target.value)}
+            >
+              <option value="qlog">q-Log entropy (Sₖq)</option>
+              <option value="tsallis">Tsallis q-entropy</option>
+            </select>
+          </div>
+
           {/* S4 semantic-merge threshold */}
           <SliderRow label="τ_sem (S4 merge)" min={0.40} max={0.95} step={0.01} decimals={2}
                      value={config.tau_sem} onChange={v => set('tau_sem', v)} />
@@ -107,7 +123,7 @@ export default function Sidebar({ config, setConfig, apiBase, setApiBase }) {
           <div className="cfg-row">
             <div className="cfg-label"><span>S4 similarity</span></div>
             <select
-              value={config.s4_similarity ?? 'cosine'}
+              value={config.s4_similarity ?? 'qcosine'}
               onChange={e => set('s4_similarity', e.target.value)}
             >
               <option value="cosine">Cosine (classical)</option>

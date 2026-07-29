@@ -37,6 +37,18 @@ OPENAI_MAX_TOKENS = 8000   # text-embedding-3 limit is 8191; keep margin
 OPENAI_BATCH = 256         # inputs per request (API allows up to 2048)
 OPENAI_WORKERS = 6         # parallel request batches (big docs stay fast)
 
+# One bad/expired key must not make the WHOLE run crawl: the first authentication
+# failure (401/403/invalid_api_key) trips this flag, after which resolve() routes
+# every OpenAI backend straight to the local model for the rest of the process —
+# no more doomed requests, no per-batch retries.
+_OPENAI_DISABLED = False
+
+
+def _is_auth_error(exc: Exception) -> bool:
+    s = f"{getattr(exc, 'status_code', '')} {exc}".lower()
+    return ("401" in s or "403" in s or "invalid_api_key" in s
+            or "unauthorized" in s or "incorrect api key" in s)
+
 
 class EmbeddingService:
     def __init__(self) -> None:
@@ -96,8 +108,10 @@ class EmbeddingService:
     # -------------------------------------------------------------- embedding
     def resolve(self, backend: Optional[str]) -> str:
         b = backend or self.default_backend()
-        if b in OPENAI_MODELS and not os.environ.get("OPENAI_API_KEY"):
-            return "multilingual"  # graceful fallback when no key
+        if b in OPENAI_MODELS and (
+            _OPENAI_DISABLED or not (os.environ.get("OPENAI_API_KEY") or "").strip()
+        ):
+            return "multilingual"  # graceful fallback when no key / key disabled
         return b
 
     def embed(self, texts: List[str], backend: Optional[str] = None) -> np.ndarray:
@@ -134,6 +148,7 @@ class EmbeddingService:
             # switch to a different-dimension local model mid-document and break
             # the cosine matmul (1536 vs 384).
             import time as _t
+            global _OPENAI_DISABLED
             last = None
             for attempt in range(4):
                 try:
@@ -141,6 +156,11 @@ class EmbeddingService:
                     return [d.embedding for d in resp.data]
                 except Exception as exc:  # noqa: BLE001
                     last = exc
+                    # A bad key never recovers on retry — disable OpenAI for the
+                    # rest of the run and fail fast to the local fallback.
+                    if _is_auth_error(exc):
+                        _OPENAI_DISABLED = True
+                        break
                     _t.sleep(1.5 * (attempt + 1))
             raise last
 

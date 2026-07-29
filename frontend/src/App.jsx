@@ -9,7 +9,8 @@ const DEFAULT_CONFIG = {
   chunking_strategy: 'auto',
   n_min: 80,
   n_max: 500,
-  // ── S3 qentropy (Tsallis q + diversity number D_q) ──
+  // ── S3 qentropy (q-log entropy / Tsallis, both drive the diversity number D_q) ──
+  entropy_mode: 'qlog',     // 'qlog' (q-logarithm entropy) | 'tsallis' (Tsallis Hill number)
   q_entropy_param: 1.0,     // q ∈ [-1, 1]; 1.0 == Shannon baseline
   K: 4,
   min_chunk_tokens: 20,
@@ -17,7 +18,7 @@ const DEFAULT_CONFIG = {
   window: 1,
   // ── S4 ──
   tau_sem: 0.75,
-  s4_similarity: 'cosine',  // 'cosine' (classical) | 'qcosine' (Fitouhi–Bouzeffour q-cosine, base=q²)
+  s4_similarity: 'qcosine', // 'qcosine' (Fitouhi–Bouzeffour q-cosine, base=q², default) | 'cosine' (classical)
   // ── Evaluation (engine.metrics, Table I) ──
   qa_count: 12,
   judge_answerability: false,
@@ -69,10 +70,11 @@ export default function App() {
         <div className="workspace-header">
           <div>
             <div className="workspace-kicker">qEntropy Document Intelligence</div>
-            <h1 className="workspace-title">Tsallis qEntropy Chunking Platform</h1>
+            <h1 className="workspace-title">qEntropy Chunking Platform</h1>
             <p className="workspace-copy">
-              Upload any document. The Tsallis q-entropy diversity number drives the S3 boundaries,
-              the genetic algorithm tunes q, and every method is scored with the Table-I retrieval metrics.
+              Upload any document. A generalized q-entropy diversity number (q-log entropy or Tsallis,
+              selectable) drives the S3 boundaries, the genetic algorithm tunes q, and every method is
+              scored with the Table-I retrieval metrics.
             </p>
           </div>
           <div className="workspace-chips">

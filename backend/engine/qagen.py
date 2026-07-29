@@ -16,6 +16,8 @@ import os
 import re
 from typing import List, Optional
 
+import numpy as np
+
 _SYSTEM = (
     "You are an expert evaluation-set author for retrieval systems. "
     "You read a document and write questions that a real user might ask whose "
@@ -104,3 +106,93 @@ def _parse_pairs(content: str, n: int) -> List[dict]:
         if q:
             out.append({"query": q, "ground_truth": a})
     return out[:n]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OFFLINE, KEY-FREE evaluation-set generation (document-derived pseudo-queries)
+# ─────────────────────────────────────────────────────────────────────────────
+# When there is no working OpenAI key we still need (query, ground_truth) pairs
+# so the Table-I retrieval metrics (Precision/Recall/MRR/NDCG/QCS) are non-zero
+# and COMPARABLE across strategies.  We derive them from the document itself —
+# never a hardcoded list, so it works for ANY document in ANY language:
+#
+#   1. Split the document into sentences.
+#   2. TF-IDF over those sentences → each sentence's salient content terms.
+#   3. Pick the most salient sentence in each of N positional bins (coverage of
+#      the whole document, not just the top).
+#   4. query        = that sentence's top content terms, in original order,
+#                     with the boilerplate/function words (low TF-IDF) dropped —
+#                     so the query is lexically DIFFERENT from the passage and
+#                     the retriever must actually locate it (not string-match).
+#      ground_truth = the full source sentence.  The scorer marks a chunk
+#                     relevant when it is similar to this ground_truth, i.e. the
+#                     chunk the sentence came from — exactly the passage a good
+#                     chunking should keep findable.
+#
+# This is the classic self-retrieval / Inverse-Cloze evaluation.  Absolute
+# scores read a little high vs LLM-written multi-hop questions, but the RELATIVE
+# ranking between methodologies (q-log vs Tsallis, q-cosine vs cosine) — which
+# is what "best methodology" needs — is preserved.
+
+_SENT_SPLIT = re.compile(r"(?<=[\.\!\?؟。])\s+|\n{2,}")
+
+
+def _split_sentences(text: str, min_chars: int = 40, max_chars: int = 400) -> List[str]:
+    out: List[str] = []
+    for raw in _SENT_SPLIT.split(text or ""):
+        s = " ".join(raw.split())            # collapse whitespace/newlines
+        if min_chars <= len(s) <= max_chars:
+            out.append(s)
+    return out
+
+
+def generate_qa_offline(text: str, n: int = 12) -> List[dict]:
+    """Key-free (query, ground_truth) pairs derived from the document itself.
+
+    Returns [] only for documents too small to yield distinct sentences (the
+    caller then falls back to the label-free quality fitness)."""
+    sents = _split_sentences(text)
+    if len(sents) < 2:
+        return []
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+    except Exception:
+        return []
+
+    vec = TfidfVectorizer(lowercase=True, token_pattern=r"(?u)\b\w[\w\-]+\b",
+                          max_df=0.6, min_df=1)
+    try:
+        X = vec.fit_transform(sents)         # (n_sents, n_terms), L2-normalised rows
+    except ValueError:
+        return []
+    terms = vec.get_feature_names_out()
+    salience = X.sum(axis=1).A1              # per-sentence total TF-IDF mass
+
+    # Positional bins → coverage of the WHOLE document, picking the single most
+    # salient sentence in each bin (dedup by index).
+    n = max(1, min(int(n), len(sents)))
+    bins = np.array_split(np.arange(len(sents)), n)
+    chosen: List[int] = []
+    for b in bins:
+        if b.size:
+            chosen.append(int(b[np.argmax(salience[b])]))
+    chosen = sorted(dict.fromkeys(chosen))   # unique, in document order
+
+    pairs: List[dict] = []
+    seen_q = set()
+    for i in chosen:
+        row = X.getrow(i)
+        if row.nnz == 0:
+            continue
+        # top content terms of this sentence by TF-IDF weight
+        order = np.argsort(row.data)[::-1]
+        top_terms = [terms[row.indices[j]] for j in order[:8]]
+        # keep them in the order they appear in the sentence for a natural query
+        low = sents[i].lower()
+        kept = sorted(set(top_terms), key=lambda t: (low.find(t) if t in low else 1e9))
+        query = " ".join([t for t in kept if (low.find(t) >= 0)][:6]).strip()
+        if len(query) < 3 or query in seen_q:
+            continue
+        seen_q.add(query)
+        pairs.append({"query": query, "ground_truth": sents[i]})
+    return pairs

@@ -335,6 +335,7 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
             "jsd_score": 0.0, "metric_score": 0.0, "boundary_signal": 0.0,
             "q": q, "diversity_number": 1.0,
             "shannon_bits": 0.0, "tsallis_bits": 0.0, "entropy_rate": 0.0,
+            "entropy_mode": entropy_mode, "qlog_bits": (0.0 if entropy_mode == "qlog" else None),
             "s3_stats": _empty_stats(1, 1),
             "thresholds": {"q": q, "target_boundaries": 0},
         })
@@ -365,6 +366,9 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
     # ── 3. Generalised entropy drives the boundary count ────────────────────
     shannon_bits = ent.shannon_entropy(p_cand)
     tsallis_bits = ent.tsallis_entropy(p_cand, q)
+    # q-log entropy value (nats) for the fingerprint when that family is
+    # selected; None under Tsallis so the UI falls back to the Tsallis S_q.
+    qlog_bits = qlog_entropy(p_cand, q) if entropy_mode == "qlog" else None
     # Effective number of gaps D → target boundary count.  The Tsallis Hill
     # number is the default; entropy_mode="qlog" swaps in the q-log entropy's
     # numbers-equivalent (both defined in the header block of this file).
@@ -484,6 +488,8 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
             "diversity_number": round(float(d_q), 3),
             "shannon_bits": round(float(shannon_bits), 4),
             "tsallis_bits": round(float(tsallis_bits), 4),
+            "entropy_mode": entropy_mode,
+            "qlog_bits": (round(float(qlog_bits), 4) if qlog_bits is not None else None),
             "entropy_rate": round(entropy_rate, 4),
         })
         out.append(base)
@@ -496,6 +502,8 @@ def refine_boundaries(chunks: List[Dict], config: Dict[str, Any]) -> List[Dict]:
         c.update({"boundary_type": "single", "jsd_score": 0.0, "metric_score": 0.0,
                   "boundary_signal": 0.0, "q": q, "diversity_number": float(d_q),
                   "shannon_bits": float(shannon_bits), "tsallis_bits": float(tsallis_bits),
+                  "entropy_mode": entropy_mode,
+                  "qlog_bits": (float(qlog_bits) if qlog_bits is not None else None),
                   "entropy_rate": entropy_rate})
         out = [c]
 

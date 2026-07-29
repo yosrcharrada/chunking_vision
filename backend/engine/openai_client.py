@@ -32,9 +32,18 @@ _DEFAULT_API_VERSION = "2024-02-15-preview"
 def _load_dotenv_once() -> None:
     try:
         from dotenv import load_dotenv  # optional dependency
-        load_dotenv()
+        # override=True: the project .env is the source of truth, so an EMPTY
+        # OPENAI_API_KEY= in .env wins over a stale/bad key left in the shell
+        # environment (otherwise dotenv keeps the shell value and the app keeps
+        # hammering OpenAI with a dead key).
+        load_dotenv(override=True)
     except Exception:
         pass
+    # Normalise the key: a blank or whitespace-only value counts as "no key",
+    # so the whole app runs fully offline (local embeddings, no QA/judge calls).
+    key = os.environ.get("OPENAI_API_KEY")
+    if key is not None and not key.strip():
+        os.environ.pop("OPENAI_API_KEY", None)
 
 
 def _configure_ssl() -> None:
@@ -74,8 +83,8 @@ def azure_mode() -> bool:
 
 
 def openai_configured() -> bool:
-    """True when a key is present (either provider)."""
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    """True when a non-blank key is present (either provider)."""
+    return bool((os.environ.get("OPENAI_API_KEY") or "").strip())
 
 
 def provider() -> str:

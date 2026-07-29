@@ -520,12 +520,25 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                     message="Generating evaluation questions…")
         qa_pairs: List[Dict[str, str]] = []
         qa_source = "none"
+        _qa_n = int(config.get("qa_count", 12))
         if qagen.openai_configured():
             try:
-                qa_pairs = qagen.generate_qa(text, n=int(config.get("qa_count", 12)))
+                qa_pairs = qagen.generate_qa(text, n=_qa_n)
                 qa_source = "openai"
             except Exception as exc:
-                logger.warning("QA generation failed (%s); evaluation will be label-free.", exc)
+                # Key missing/invalid or provider error → fall back to the
+                # offline, document-derived pseudo-queries so the Table-I
+                # retrieval metrics are still computed (not label-free).
+                logger.warning("LLM QA generation failed (%s); using offline "
+                               "document-derived evaluation set.", exc)
+        if not qa_pairs:
+            try:
+                qa_pairs = qagen.generate_qa_offline(text, n=_qa_n)
+                if qa_pairs:
+                    qa_source = "offline"
+            except Exception as exc:
+                logger.warning("Offline QA generation failed (%s); evaluation "
+                               "will be label-free.", exc)
         config["qa_pairs"] = qa_pairs
         eval_ctx = build_context(
             text, qa_pairs=qa_pairs,
@@ -885,6 +898,8 @@ def _run_pipeline(job_id: str, doc_id: str, user_config: Dict[str, Any]) -> None
                         "diversity_number": (out["chunks"][0].get("diversity_number") if out.get("chunks") else None),
                         "shannon_bits": (out["chunks"][0].get("shannon_bits") if out.get("chunks") else None),
                         "tsallis_bits": (out["chunks"][0].get("tsallis_bits") if out.get("chunks") else None),
+                        "entropy_mode": (out["chunks"][0].get("entropy_mode") if out.get("chunks") else None),
+                        "qlog_bits": (out["chunks"][0].get("qlog_bits") if out.get("chunks") else None),
                         "entropy_rate": (out["chunks"][0].get("entropy_rate") if out.get("chunks") else None),
                     }
                     for name, out in s7_outputs.items()
